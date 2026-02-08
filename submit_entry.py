@@ -31,22 +31,31 @@ def extract_entry(pack_dir: Path, source_repo: str) -> dict:
     manifest = json.loads(manifest_path.read_text())
     att = manifest.get("attestation", {})
 
-    return {
+    # Required fields
+    entry = {
         "schema_version": 1,
         "pack_root_sha256": manifest.get("pack_root_sha256", manifest.get("attestation_sha256", "")),
         "pack_id": att.get("pack_id", manifest.get("pack_id", "")),
         "receipt_integrity": att.get("receipt_integrity", "UNKNOWN"),
         "claim_check": att.get("claim_check", "N/A"),
         "n_receipts": att.get("n_receipts", 0),
-        "mode": att.get("mode", ""),
-        "assurance_level": att.get("assurance_level", ""),
-        "timestamp_start": att.get("timestamp_start", ""),
-        "timestamp_end": att.get("timestamp_end", ""),
         "submitted_at": datetime.now(timezone.utc).isoformat(),
         "source_repo": source_repo,
-        "signer_pubkey_sha256": manifest.get("signer_pubkey_sha256", ""),
-        "verifier_version": att.get("verifier_version", ""),
     }
+
+    # Optional fields: only include when non-empty
+    for key, val in [
+        ("mode", att.get("mode")),
+        ("assurance_level", att.get("assurance_level")),
+        ("timestamp_start", att.get("timestamp_start")),
+        ("timestamp_end", att.get("timestamp_end")),
+        ("signer_pubkey_sha256", manifest.get("signer_pubkey_sha256")),
+        ("verifier_version", att.get("verifier_version")),
+    ]:
+        if val:
+            entry[key] = val
+
+    return entry
 
 
 def already_in_ledger(root_sha256: str) -> bool:

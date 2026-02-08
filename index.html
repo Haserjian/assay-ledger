@@ -187,19 +187,61 @@ assay verify-pack ./path/to/proof_pack_dir/
       return;
     }
 
-    // Stats
+    // Stats (safe: only numeric values rendered)
     const passCount = entries.filter(e => e.receipt_integrity === 'PASS' && e.claim_check === 'PASS').length;
     const claimFailCount = entries.filter(e => e.receipt_integrity === 'PASS' && e.claim_check === 'FAIL').length;
     const integrityFailCount = entries.filter(e => e.receipt_integrity === 'FAIL').length;
     const totalReceipts = entries.reduce((sum, e) => sum + (e.n_receipts || 0), 0);
 
-    statsDiv.innerHTML = `
-      <div class="stat"><div class="stat-value">${entries.length}</div><div class="stat-label">Total Packs</div></div>
-      <div class="stat"><div class="stat-value pass">${passCount}</div><div class="stat-label">All Pass</div></div>
-      ${claimFailCount ? `<div class="stat"><div class="stat-value fail">${claimFailCount}</div><div class="stat-label">Claim Fail</div></div>` : ''}
-      ${integrityFailCount ? `<div class="stat"><div class="stat-value fail">${integrityFailCount}</div><div class="stat-label">Integrity Fail</div></div>` : ''}
-      <div class="stat"><div class="stat-value">${totalReceipts}</div><div class="stat-label">Total Receipts</div></div>
-    `;
+    function addStat(value, label, cls) {
+      const div = document.createElement('div');
+      div.className = 'stat';
+      const valDiv = document.createElement('div');
+      valDiv.className = 'stat-value' + (cls ? ' ' + cls : '');
+      valDiv.textContent = String(value);
+      const lblDiv = document.createElement('div');
+      lblDiv.className = 'stat-label';
+      lblDiv.textContent = label;
+      div.appendChild(valDiv);
+      div.appendChild(lblDiv);
+      statsDiv.appendChild(div);
+    }
+    addStat(entries.length, 'Total Packs', '');
+    addStat(passCount, 'All Pass', 'pass');
+    if (claimFailCount) addStat(claimFailCount, 'Claim Fail', 'fail');
+    if (integrityFailCount) addStat(integrityFailCount, 'Integrity Fail', 'fail');
+    addStat(totalReceipts, 'Total Receipts', '');
+
+    // Safe element creation helpers
+    function td(text, className) {
+      const el = document.createElement('td');
+      el.textContent = text;
+      if (className) el.className = className;
+      return el;
+    }
+
+    function tdLink(text, href, className) {
+      const el = document.createElement('td');
+      // Only allow github.com links
+      const safeHref = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(href) ? href : '#';
+      const a = document.createElement('a');
+      a.className = className || '';
+      a.href = safeHref;
+      a.textContent = text;
+      el.appendChild(a);
+      return el;
+    }
+
+    function tdHash(fullHash) {
+      const el = document.createElement('td');
+      el.className = 'hash';
+      const span = document.createElement('span');
+      span.className = 'hash-short';
+      span.title = fullHash || '';
+      span.textContent = fullHash ? fullHash.slice(0, 16) + '...' : '?';
+      el.appendChild(span);
+      return el;
+    }
 
     // Table rows (newest first)
     entries.reverse().forEach((entry, i) => {
@@ -213,19 +255,17 @@ assay verify-pack ./path/to/proof_pack_dir/
         ? new Date(entry.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         : '?';
 
-      const repoUrl = entry.source_repo ? `https://github.com/${entry.source_repo}` : '#';
-      const shortHash = entry.pack_root_sha256 ? entry.pack_root_sha256.slice(0, 16) + '...' : '?';
+      const repoUrl = entry.source_repo ? 'https://github.com/' + entry.source_repo : '#';
 
-      tr.innerHTML = `
-        <td class="mono">${num}</td>
-        <td class="mono">${entry.pack_id || '?'}</td>
-        <td class="${intClass}">${entry.receipt_integrity || '?'}</td>
-        <td class="${claimClass}">${entry.claim_check || '?'}</td>
-        <td class="mono">${entry.n_receipts ?? '?'}</td>
-        <td><a class="source-link" href="${repoUrl}">${entry.source_repo || '?'}</a></td>
-        <td>${submitted}</td>
-        <td class="hash"><span class="hash-short" title="${entry.pack_root_sha256 || ''}">${shortHash}</span></td>
-      `;
+      tr.appendChild(td(String(num), 'mono'));
+      tr.appendChild(td(entry.pack_id || '?', 'mono'));
+      tr.appendChild(td(entry.receipt_integrity || '?', intClass));
+      tr.appendChild(td(entry.claim_check || '?', claimClass));
+      tr.appendChild(td(String(entry.n_receipts ?? '?'), 'mono'));
+      tr.appendChild(tdLink(entry.source_repo || '?', repoUrl, 'source-link'));
+      tr.appendChild(td(submitted, ''));
+      tr.appendChild(tdHash(entry.pack_root_sha256));
+
       tbody.appendChild(tr);
     });
 

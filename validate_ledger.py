@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 SCHEMA_PATH = Path(__file__).parent / "ledger.schema.json"
@@ -25,12 +26,12 @@ REQUIRED_FIELDS = {
     "receipt_integrity",
     "claim_check",
     "n_receipts",
-    "timestamp_start",
     "submitted_at",
     "source_repo",
 }
 
 OPTIONAL_FIELDS = {
+    "timestamp_start",
     "timestamp_end",
     "mode",
     "assurance_level",
@@ -82,6 +83,18 @@ def validate_entry(entry: dict, line_num: int) -> list[str]:
     n = entry.get("n_receipts")
     if n is not None and (not isinstance(n, int) or n < 0):
         errors.append(f"line {line_num}: n_receipts must be a non-negative integer")
+
+    # ISO datetime format validation
+    for dt_field in ("submitted_at", "timestamp_start", "timestamp_end"):
+        dt_val = entry.get(dt_field)
+        if dt_val is not None:
+            try:
+                s = dt_val
+                if s.endswith("Z"):
+                    s = s[:-1] + "+00:00"
+                datetime.fromisoformat(s)
+            except (ValueError, TypeError):
+                errors.append(f"line {line_num}: {dt_field} is not a valid ISO 8601 datetime")
 
     return errors
 

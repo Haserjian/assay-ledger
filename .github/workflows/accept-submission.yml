@@ -38,52 +38,138 @@ on:
         required: false
         default: ''
 
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ledger-submit-${{ inputs.pack_root_sha256 }}
+  cancel-in-progress: false
+
 jobs:
   submit:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Check for duplicate
         id: check
+        env:
+          INPUT_PACK_ROOT_SHA256: ${{ inputs.pack_root_sha256 }}
         run: |
-          if grep -q '"${{ inputs.pack_root_sha256 }}"' ledger.jsonl 2>/dev/null; then
-            echo "duplicate=true" >> "$GITHUB_OUTPUT"
-            echo "Entry already exists in ledger"
-          else
-            echo "duplicate=false" >> "$GITHUB_OUTPUT"
-          fi
+          python3 - <<'PY'
+          import json, os, sys
+          target = os.environ["INPUT_PACK_ROOT_SHA256"].strip()
+          if not target:
+              print("::error::pack_root_sha256 is empty")
+              sys.exit(1)
+          try:
+              with open("ledger.jsonl") as f:
+                  for line in f:
+                      line = line.strip()
+                      if not line:
+                          continue
+                      if json.loads(line).get("pack_root_sha256") == target:
+                          print("Entry already exists in ledger")
+                          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+                              out.write("duplicate=true\n")
+                          sys.exit(0)
+          except FileNotFoundError:
+              pass
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write("duplicate=false\n")
+          PY
 
       - name: Append entry
         if: steps.check.outputs.duplicate == 'false'
+        env:
+          INPUT_PACK_ROOT_SHA256: ${{ inputs.pack_root_sha256 }}
+          INPUT_PACK_ID: ${{ inputs.pack_id }}
+          INPUT_RECEIPT_INTEGRITY: ${{ inputs.receipt_integrity }}
+          INPUT_CLAIM_CHECK: ${{ inputs.claim_check }}
+          INPUT_N_RECEIPTS: ${{ inputs.n_receipts }}
+          INPUT_SOURCE_REPO: ${{ inputs.source_repo }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_TIMESTAMP_START: ${{ inputs.timestamp_start }}
+          INPUT_SIGNER_PUBKEY_SHA256: ${{ inputs.signer_pubkey_sha256 }}
+          INPUT_VERIFIER_VERSION: ${{ inputs.verifier_version }}
         run: |
-          python3 -c "
-          import json
+          python3 - <<'PY'
+          import json, os, re, sys
           from datetime import datetime, timezone
+
+          SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+          VALID_INTEGRITY = {"PASS", "FAIL"}
+          VALID_CLAIM = {"PASS", "FAIL", "N/A"}
+
+          def req(key):
+              v = os.environ.get(key, "").strip()
+              if not v:
+                  print(f"::error::Missing required input: {key}", file=sys.stderr)
+                  sys.exit(1)
+              return v
+
+          def opt(key):
+              return os.environ.get(key, "").strip() or None
+
+          # Build entry from env vars (never from string interpolation)
+          root = req("INPUT_PACK_ROOT_SHA256")
+          if not SHA256_RE.match(root):
+              print("::error::pack_root_sha256 is not valid hex SHA-256", file=sys.stderr)
+              sys.exit(1)
+
+          integrity = req("INPUT_RECEIPT_INTEGRITY")
+          if integrity not in VALID_INTEGRITY:
+              print(f"::error::receipt_integrity must be PASS or FAIL, got '{integrity}'", file=sys.stderr)
+              sys.exit(1)
+
+          claim = req("INPUT_CLAIM_CHECK")
+          if claim not in VALID_CLAIM:
+              print(f"::error::claim_check must be PASS/FAIL/N/A, got '{claim}'", file=sys.stderr)
+              sys.exit(1)
+
+          try:
+              n_receipts = int(req("INPUT_N_RECEIPTS"))
+          except ValueError:
+              print("::error::n_receipts must be an integer", file=sys.stderr)
+              sys.exit(1)
+
           entry = {
-              'schema_version': 1,
-              'pack_root_sha256': '${{ inputs.pack_root_sha256 }}',
-              'pack_id': '${{ inputs.pack_id }}',
-              'receipt_integrity': '${{ inputs.receipt_integrity }}',
-              'claim_check': '${{ inputs.claim_check }}',
-              'n_receipts': int('${{ inputs.n_receipts }}'),
-              'submitted_at': datetime.now(timezone.utc).isoformat(),
-              'source_repo': '${{ inputs.source_repo }}',
+              "schema_version": 1,
+              "pack_root_sha256": root,
+              "pack_id": req("INPUT_PACK_ID"),
+              "receipt_integrity": integrity,
+              "claim_check": claim,
+              "n_receipts": n_receipts,
+              "submitted_at": datetime.now(timezone.utc).isoformat(),
+              "source_repo": req("INPUT_SOURCE_REPO"),
           }
-          if '${{ inputs.mode }}':
-              entry['mode'] = '${{ inputs.mode }}'
-          if '${{ inputs.timestamp_start }}':
-              entry['timestamp_start'] = '${{ inputs.timestamp_start }}'
-          if '${{ inputs.signer_pubkey_sha256 }}':
-              entry['signer_pubkey_sha256'] = '${{ inputs.signer_pubkey_sha256 }}'
-          if '${{ inputs.verifier_version }}':
-              entry['verifier_version'] = '${{ inputs.verifier_version }}'
-          with open('ledger.jsonl', 'a') as f:
-              f.write(json.dumps(entry, separators=(',', ':')) + '\n')
-          "
+
+          # Optional fields: only include if non-empty
+          mode = opt("INPUT_MODE")
+          if mode:
+              entry["mode"] = mode
+
+          ts = opt("INPUT_TIMESTAMP_START")
+          if ts:
+              entry["timestamp_start"] = ts
+
+          signer = opt("INPUT_SIGNER_PUBKEY_SHA256")
+          if signer:
+              if not SHA256_RE.match(signer):
+                  print("::error::signer_pubkey_sha256 is not valid hex SHA-256", file=sys.stderr)
+                  sys.exit(1)
+              entry["signer_pubkey_sha256"] = signer
+
+          ver = opt("INPUT_VERIFIER_VERSION")
+          if ver:
+              entry["verifier_version"] = ver
+
+          with open("ledger.jsonl", "a") as f:
+              f.write(json.dumps(entry, separators=(",", ":")) + "\n")
+
+          print(f"Appended: {root[:16]}... ({entry['pack_id']})")
+          PY
 
       - name: Validate
         if: steps.check.outputs.duplicate == 'false'
@@ -91,31 +177,26 @@ jobs:
 
       - name: Create PR
         if: steps.check.outputs.duplicate == 'false'
+        env:
+          INPUT_PACK_ROOT_SHA256: ${{ inputs.pack_root_sha256 }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH="submit/${{ inputs.pack_root_sha256 }}"
-          BRANCH="${BRANCH:0:60}"
+          BRANCH="submit/${INPUT_PACK_ROOT_SHA256:0:16}"
           git checkout -b "$BRANCH"
           git add ledger.jsonl
           git config user.name "assay-ledger[bot]"
           git config user.email "noreply@assay-ledger"
-          git commit -m "ledger: add ${{ inputs.pack_id }} from ${{ inputs.source_repo }}"
+          git commit -m "ledger: append entry"
           git push origin "$BRANCH"
-          gh pr create \
-            --title "Ledger: ${{ inputs.pack_id }}" \
-            --body "$(cat <<'EOF'
-          ## New Ledger Entry
 
-          | Field | Value |
-          |-------|-------|
-          | Pack ID | `${{ inputs.pack_id }}` |
-          | Integrity | `${{ inputs.receipt_integrity }}` |
-          | Claims | `${{ inputs.claim_check }}` |
-          | Receipts | `${{ inputs.n_receipts }}` |
-          | Source | `${{ inputs.source_repo }}` |
-          | Fingerprint | `${{ inputs.pack_root_sha256 }}` |
-
-          Submitted via `workflow_dispatch`.
-          EOF
-          )"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Build PR body from env (no input interpolation in shell)
+          python3 - <<'PY'
+          import os, subprocess
+          root = os.environ["INPUT_PACK_ROOT_SHA256"]
+          title = f"Ledger: {root[:16]}..."
+          body = "New ledger entry submitted via workflow_dispatch.\n\nRun `python3 validate_ledger.py` to verify."
+          subprocess.run(
+              ["gh", "pr", "create", "--title", title, "--body", body],
+              check=True,
+          )
+          PY

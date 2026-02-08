@@ -10,7 +10,6 @@
     "receipt_integrity",
     "claim_check",
     "n_receipts",
-    "timestamp_start",
     "submitted_at",
     "source_repo"
   ],
