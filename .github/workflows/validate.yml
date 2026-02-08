@@ -20,6 +20,12 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install test deps
+        run: pip install pytest --quiet
+
+      - name: Run adversarial regression tests
+        run: python -m pytest tests/ -v
+
       - name: Validate ledger.jsonl
         run: python validate_ledger.py
 

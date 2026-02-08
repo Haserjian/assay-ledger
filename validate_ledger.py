@@ -16,8 +16,20 @@ SCHEMA_PATH = Path(__file__).parent / "ledger.schema.json"
 LEDGER_PATH = Path(__file__).parent / "ledger.jsonl"
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+SOURCE_REPO_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
 VALID_INTEGRITY = {"PASS", "FAIL"}
 VALID_CLAIM = {"PASS", "FAIL", "N/A"}
+
+# Max lengths for string fields (bytes)
+MAX_LENGTHS = {
+    "pack_id": 256,
+    "source_repo": 256,
+    "source_workflow": 512,
+    "mode": 64,
+    "assurance_level": 16,
+    "verifier_version": 64,
+}
 
 REQUIRED_FIELDS = {
     "schema_version",
@@ -95,6 +107,22 @@ def validate_entry(entry: dict, line_num: int) -> list[str]:
                 datetime.fromisoformat(s)
             except (ValueError, TypeError):
                 errors.append(f"line {line_num}: {dt_field} is not a valid ISO 8601 datetime")
+
+    # Control character rejection (all string values)
+    for key, val in entry.items():
+        if isinstance(val, str) and CONTROL_CHAR_RE.search(val):
+            errors.append(f"line {line_num}: field '{key}' contains control characters")
+
+    # Max length checks
+    for field, max_len in MAX_LENGTHS.items():
+        val = entry.get(field)
+        if isinstance(val, str) and len(val) > max_len:
+            errors.append(f"line {line_num}: field '{field}' exceeds max length {max_len} (got {len(val)})")
+
+    # source_repo format (owner/repo, alphanumeric + dots/hyphens/underscores)
+    repo = entry.get("source_repo")
+    if isinstance(repo, str) and not SOURCE_REPO_RE.match(repo):
+        errors.append(f"line {line_num}: source_repo must match 'owner/repo' format")
 
     return errors
 
