@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Assay Public Ledger</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --blue: #58a6ff;
+    --mono: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 2rem;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+  }
+  .stats {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 1.25rem;
+  }
+  .stat-value { font-size: 1.5rem; font-weight: 600; font-family: var(--mono); }
+  .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  thead th {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  tbody td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tbody tr:hover { background: var(--surface); }
+  .hash {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--blue);
+    word-break: break-all;
+  }
+  .hash-short { cursor: help; }
+  .pass { color: var(--green); font-weight: 600; }
+  .fail { color: var(--red); font-weight: 600; }
+  .na { color: var(--text-muted); }
+  .mono { font-family: var(--mono); font-size: 0.8rem; }
+  .source-link { color: var(--blue); text-decoration: none; }
+  .source-link:hover { text-decoration: underline; }
+  .footer {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+  .footer a { color: var(--blue); text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+  .how-to {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.85rem;
+  }
+  .how-to summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .how-to pre {
+    background: var(--bg);
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin-top: 0.75rem;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+  }
+  .how-to code { font-family: var(--mono); color: var(--blue); }
+  .how-to p { margin-top: 0.5rem; color: var(--text-muted); }
+  #loading { color: var(--text-muted); padding: 2rem; text-align: center; }
+  #error { color: var(--red); padding: 1rem; display: none; }
+</style>
+</head>
+<body>
+
+<h1>Assay Public Ledger</h1>
+<p class="subtitle">Append-only record of verified AI evidence bundles (Proof Packs)</p>
+
+<div class="stats" id="stats"></div>
+
+<details class="how-to">
+  <summary>How to verify any entry</summary>
+  <p>Every row is a fingerprint of a signed Proof Pack. To independently verify:</p>
+  <pre>pip install assay-ai
+assay verify-pack ./path/to/proof_pack_dir/
+
+# The pack_root_sha256 in your verify_report.json
+# should match the hash shown in this ledger.</pre>
+  <p>The ledger only stores attestation <em>pointers</em> (SHA-256 fingerprints), not the evidence itself.
+  The pack author holds the original pack. If they share it with you, you can verify it matches
+  the ledger entry by comparing <code>pack_root_sha256</code>.</p>
+</details>
+
+<div id="error"></div>
+<div id="loading">Loading ledger...</div>
+<table id="ledger-table" style="display:none">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Pack ID</th>
+      <th>Integrity</th>
+      <th>Claims</th>
+      <th>Receipts</th>
+      <th>Source</th>
+      <th>Submitted</th>
+      <th>Fingerprint</th>
+    </tr>
+  </thead>
+  <tbody id="ledger-body"></tbody>
+</table>
+
+<div class="footer">
+  <p>
+    Powered by <a href="https://pypi.org/project/assay-ai/">assay-ai</a> |
+    <a href="https://github.com/Haserjian/assay-ledger">Source</a> |
+    <a href="ledger.jsonl">Raw JSONL</a>
+  </p>
+  <p>Each entry is a SHA-256 attestation pointer. The ledger proves <em>when</em> a verification result was recorded, not that the evidence was honestly created. <a href="https://github.com/Haserjian/ccio">Learn more about Assay</a>.</p>
+</div>
+
+<script>
+(async function() {
+  const loading = document.getElementById('loading');
+  const errorDiv = document.getElementById('error');
+  const table = document.getElementById('ledger-table');
+  const tbody = document.getElementById('ledger-body');
+  const statsDiv = document.getElementById('stats');
+
+  try {
+    const resp = await fetch('ledger.jsonl');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+
+    const entries = text.trim().split('\n')
+      .filter(line => line.trim())
+      .map(line => JSON.parse(line));
+
+    if (entries.length === 0) {
+      loading.textContent = 'Ledger is empty.';
+      return;
+    }
+
+    // Stats
+    const passCount = entries.filter(e => e.receipt_integrity === 'PASS' && e.claim_check === 'PASS').length;
+    const claimFailCount = entries.filter(e => e.receipt_integrity === 'PASS' && e.claim_check === 'FAIL').length;
+    const integrityFailCount = entries.filter(e => e.receipt_integrity === 'FAIL').length;
+    const totalReceipts = entries.reduce((sum, e) => sum + (e.n_receipts || 0), 0);
+
+    statsDiv.innerHTML = `
+      <div class="stat"><div class="stat-value">${entries.length}</div><div class="stat-label">Total Packs</div></div>
+      <div class="stat"><div class="stat-value pass">${passCount}</div><div class="stat-label">All Pass</div></div>
+      ${claimFailCount ? `<div class="stat"><div class="stat-value fail">${claimFailCount}</div><div class="stat-label">Claim Fail</div></div>` : ''}
+      ${integrityFailCount ? `<div class="stat"><div class="stat-value fail">${integrityFailCount}</div><div class="stat-label">Integrity Fail</div></div>` : ''}
+      <div class="stat"><div class="stat-value">${totalReceipts}</div><div class="stat-label">Total Receipts</div></div>
+    `;
+
+    // Table rows (newest first)
+    entries.reverse().forEach((entry, i) => {
+      const num = entries.length - i;
+      const tr = document.createElement('tr');
+
+      const intClass = entry.receipt_integrity === 'PASS' ? 'pass' : 'fail';
+      const claimClass = entry.claim_check === 'PASS' ? 'pass' : entry.claim_check === 'FAIL' ? 'fail' : 'na';
+
+      const submitted = entry.submitted_at
+        ? new Date(entry.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : '?';
+
+      const repoUrl = entry.source_repo ? `https://github.com/${entry.source_repo}` : '#';
+      const shortHash = entry.pack_root_sha256 ? entry.pack_root_sha256.slice(0, 16) + '...' : '?';
+
+      tr.innerHTML = `
+        <td class="mono">${num}</td>
+        <td class="mono">${entry.pack_id || '?'}</td>
+        <td class="${intClass}">${entry.receipt_integrity || '?'}</td>
+        <td class="${claimClass}">${entry.claim_check || '?'}</td>
+        <td class="mono">${entry.n_receipts ?? '?'}</td>
+        <td><a class="source-link" href="${repoUrl}">${entry.source_repo || '?'}</a></td>
+        <td>${submitted}</td>
+        <td class="hash"><span class="hash-short" title="${entry.pack_root_sha256 || ''}">${shortHash}</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    loading.style.display = 'none';
+    table.style.display = '';
+  } catch (err) {
+    loading.style.display = 'none';
+    errorDiv.style.display = '';
+    errorDiv.textContent = `Failed to load ledger: ${err.message}`;
+  }
+})();
+</script>
+
+</body>
+</html>

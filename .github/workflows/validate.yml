@@ -1,0 +1,42 @@
+name: Validate Ledger
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate ledger.jsonl
+        run: python validate_ledger.py
+
+      - name: Check append-only (PRs only)
+        if: github.event_name == 'pull_request'
+        run: |
+          # Fetch base branch ledger
+          git fetch origin ${{ github.base_ref }}
+          git show origin/${{ github.base_ref }}:ledger.jsonl > /tmp/base_ledger.jsonl 2>/dev/null || touch /tmp/base_ledger.jsonl
+
+          # Every line in base must appear in PR version, in order
+          BASE_LINES=$(wc -l < /tmp/base_ledger.jsonl | tr -d ' ')
+          if [ "$BASE_LINES" -gt 0 ]; then
+            HEAD_PREFIX=$(head -n "$BASE_LINES" ledger.jsonl)
+            BASE_CONTENT=$(cat /tmp/base_ledger.jsonl)
+            if [ "$HEAD_PREFIX" != "$BASE_CONTENT" ]; then
+              echo "::error::Ledger is not append-only. Existing entries were modified or removed."
+              exit 1
+            fi
+          fi
+
+          NEW_LINES=$(($(wc -l < ledger.jsonl | tr -d ' ') - BASE_LINES))
+          echo "Append-only check passed. $NEW_LINES new entries."

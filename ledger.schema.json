@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Assay Ledger Entry",
+  "description": "One line in ledger.jsonl — an attestation pointer to a verified Proof Pack.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "pack_root_sha256",
+    "pack_id",
+    "receipt_integrity",
+    "claim_check",
+    "n_receipts",
+    "timestamp_start",
+    "submitted_at",
+    "source_repo"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "description": "Ledger entry schema version"
+    },
+    "pack_root_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 of the canonicalized attestation — the primary key"
+    },
+    "pack_id": {
+      "type": "string",
+      "description": "Human-readable pack identifier"
+    },
+    "receipt_integrity": {
+      "type": "string",
+      "enum": ["PASS", "FAIL"],
+      "description": "Did the evidence pass integrity checks?"
+    },
+    "claim_check": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "N/A"],
+      "description": "Did behavioral claims pass?"
+    },
+    "n_receipts": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of receipts in the pack"
+    },
+    "mode": {
+      "type": "string",
+      "description": "Pack mode (shadow, active, etc.)"
+    },
+    "assurance_level": {
+      "type": "string",
+      "description": "Assurance level (L0, L1, etc.)"
+    },
+    "timestamp_start": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the run started"
+    },
+    "timestamp_end": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the run ended"
+    },
+    "submitted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this entry was submitted to the ledger"
+    },
+    "source_repo": {
+      "type": "string",
+      "description": "GitHub repo that produced this pack (owner/repo)"
+    },
+    "source_workflow": {
+      "type": "string",
+      "description": "GitHub Actions workflow that produced this entry"
+    },
+    "signer_pubkey_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 of the signer's public key"
+    },
+    "verifier_version": {
+      "type": "string",
+      "description": "Version of assay-ai that verified the pack"
+    }
+  },
+  "additionalProperties": false
+}

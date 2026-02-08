@@ -1,0 +1,121 @@
+name: Accept Submission
+
+on:
+  workflow_dispatch:
+    inputs:
+      pack_root_sha256:
+        description: 'SHA-256 attestation fingerprint'
+        required: true
+      pack_id:
+        description: 'Pack ID'
+        required: true
+      receipt_integrity:
+        description: 'PASS or FAIL'
+        required: true
+      claim_check:
+        description: 'PASS, FAIL, or N/A'
+        required: true
+      n_receipts:
+        description: 'Number of receipts'
+        required: true
+      source_repo:
+        description: 'Source repo (owner/repo)'
+        required: true
+      mode:
+        description: 'Pack mode'
+        required: false
+        default: ''
+      timestamp_start:
+        description: 'Run start time (ISO 8601)'
+        required: false
+        default: ''
+      signer_pubkey_sha256:
+        description: 'Signer public key SHA-256'
+        required: false
+        default: ''
+      verifier_version:
+        description: 'assay-ai version'
+        required: false
+        default: ''
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for duplicate
+        id: check
+        run: |
+          if grep -q '"${{ inputs.pack_root_sha256 }}"' ledger.jsonl 2>/dev/null; then
+            echo "duplicate=true" >> "$GITHUB_OUTPUT"
+            echo "Entry already exists in ledger"
+          else
+            echo "duplicate=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Append entry
+        if: steps.check.outputs.duplicate == 'false'
+        run: |
+          python3 -c "
+          import json
+          from datetime import datetime, timezone
+          entry = {
+              'schema_version': 1,
+              'pack_root_sha256': '${{ inputs.pack_root_sha256 }}',
+              'pack_id': '${{ inputs.pack_id }}',
+              'receipt_integrity': '${{ inputs.receipt_integrity }}',
+              'claim_check': '${{ inputs.claim_check }}',
+              'n_receipts': int('${{ inputs.n_receipts }}'),
+              'submitted_at': datetime.now(timezone.utc).isoformat(),
+              'source_repo': '${{ inputs.source_repo }}',
+          }
+          if '${{ inputs.mode }}':
+              entry['mode'] = '${{ inputs.mode }}'
+          if '${{ inputs.timestamp_start }}':
+              entry['timestamp_start'] = '${{ inputs.timestamp_start }}'
+          if '${{ inputs.signer_pubkey_sha256 }}':
+              entry['signer_pubkey_sha256'] = '${{ inputs.signer_pubkey_sha256 }}'
+          if '${{ inputs.verifier_version }}':
+              entry['verifier_version'] = '${{ inputs.verifier_version }}'
+          with open('ledger.jsonl', 'a') as f:
+              f.write(json.dumps(entry, separators=(',', ':')) + '\n')
+          "
+
+      - name: Validate
+        if: steps.check.outputs.duplicate == 'false'
+        run: python3 validate_ledger.py
+
+      - name: Create PR
+        if: steps.check.outputs.duplicate == 'false'
+        run: |
+          BRANCH="submit/${{ inputs.pack_root_sha256 }}"
+          BRANCH="${BRANCH:0:60}"
+          git checkout -b "$BRANCH"
+          git add ledger.jsonl
+          git config user.name "assay-ledger[bot]"
+          git config user.email "noreply@assay-ledger"
+          git commit -m "ledger: add ${{ inputs.pack_id }} from ${{ inputs.source_repo }}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "Ledger: ${{ inputs.pack_id }}" \
+            --body "$(cat <<'EOF'
+          ## New Ledger Entry
+
+          | Field | Value |
+          |-------|-------|
+          | Pack ID | `${{ inputs.pack_id }}` |
+          | Integrity | `${{ inputs.receipt_integrity }}` |
+          | Claims | `${{ inputs.claim_check }}` |
+          | Receipts | `${{ inputs.n_receipts }}` |
+          | Source | `${{ inputs.source_repo }}` |
+          | Fingerprint | `${{ inputs.pack_root_sha256 }}` |
+
+          Submitted via `workflow_dispatch`.
+          EOF
+          )"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

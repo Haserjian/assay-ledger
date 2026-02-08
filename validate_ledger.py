@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""Validate ledger.jsonl against the schema and check invariants.
+
+Exit 0 = valid, Exit 1 = validation error.
+Used by CI to gate all ledger PRs.
+"""
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+SCHEMA_PATH = Path(__file__).parent / "ledger.schema.json"
+LEDGER_PATH = Path(__file__).parent / "ledger.jsonl"
+
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+VALID_INTEGRITY = {"PASS", "FAIL"}
+VALID_CLAIM = {"PASS", "FAIL", "N/A"}
+
+REQUIRED_FIELDS = {
+    "schema_version",
+    "pack_root_sha256",
+    "pack_id",
+    "receipt_integrity",
+    "claim_check",
+    "n_receipts",
+    "timestamp_start",
+    "submitted_at",
+    "source_repo",
+}
+
+OPTIONAL_FIELDS = {
+    "timestamp_end",
+    "mode",
+    "assurance_level",
+    "source_workflow",
+    "signer_pubkey_sha256",
+    "verifier_version",
+}
+
+ALL_FIELDS = REQUIRED_FIELDS | OPTIONAL_FIELDS
+
+
+def validate_entry(entry: dict, line_num: int) -> list[str]:
+    """Validate a single ledger entry. Returns list of error strings."""
+    errors: list[str] = []
+
+    # Check required fields
+    for field in REQUIRED_FIELDS:
+        if field not in entry:
+            errors.append(f"line {line_num}: missing required field '{field}'")
+
+    # Check no extra fields
+    extra = set(entry.keys()) - ALL_FIELDS
+    if extra:
+        errors.append(f"line {line_num}: unexpected fields: {extra}")
+
+    # Schema version
+    if entry.get("schema_version") != 1:
+        errors.append(f"line {line_num}: schema_version must be 1, got {entry.get('schema_version')}")
+
+    # SHA-256 format
+    root = entry.get("pack_root_sha256", "")
+    if not SHA256_RE.match(root):
+        errors.append(f"line {line_num}: pack_root_sha256 is not a valid SHA-256 hex string")
+
+    signer = entry.get("signer_pubkey_sha256")
+    if signer is not None and not SHA256_RE.match(signer):
+        errors.append(f"line {line_num}: signer_pubkey_sha256 is not a valid SHA-256 hex string")
+
+    # Enum checks
+    integrity = entry.get("receipt_integrity")
+    if integrity is not None and integrity not in VALID_INTEGRITY:
+        errors.append(f"line {line_num}: receipt_integrity must be PASS or FAIL, got '{integrity}'")
+
+    claim = entry.get("claim_check")
+    if claim is not None and claim not in VALID_CLAIM:
+        errors.append(f"line {line_num}: claim_check must be PASS/FAIL/N/A, got '{claim}'")
+
+    # n_receipts
+    n = entry.get("n_receipts")
+    if n is not None and (not isinstance(n, int) or n < 0):
+        errors.append(f"line {line_num}: n_receipts must be a non-negative integer")
+
+    return errors
+
+
+def validate_ledger(path: Path) -> list[str]:
+    """Validate entire ledger file. Returns list of all errors."""
+    if not path.exists():
+        return ["ledger.jsonl not found"]
+
+    errors: list[str] = []
+    seen_roots: dict[str, int] = {}
+
+    with open(path) as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError as e:
+                errors.append(f"line {line_num}: invalid JSON: {e}")
+                continue
+
+            errors.extend(validate_entry(entry, line_num))
+
+            # Uniqueness: pack_root_sha256 must not repeat
+            root = entry.get("pack_root_sha256", "")
+            if root in seen_roots:
+                errors.append(
+                    f"line {line_num}: duplicate pack_root_sha256 "
+                    f"(first seen on line {seen_roots[root]})"
+                )
+            else:
+                seen_roots[root] = line_num
+
+    if not seen_roots:
+        errors.append("ledger.jsonl is empty")
+
+    return errors
+
+
+def main() -> int:
+    ledger = Path(sys.argv[1]) if len(sys.argv) > 1 else LEDGER_PATH
+    errors = validate_ledger(ledger)
+
+    if errors:
+        print(f"FAIL: {len(errors)} validation error(s):")
+        for e in errors:
+            print(f"  - {e}")
+        return 1
+
+    # Count entries
+    with open(ledger) as f:
+        count = sum(1 for line in f if line.strip())
+    print(f"PASS: {count} ledger entries validated")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
