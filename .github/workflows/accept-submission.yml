@@ -6,35 +6,27 @@ on:
       pack_root_sha256:
         description: 'SHA-256 attestation fingerprint'
         required: true
-      pack_id:
-        description: 'Pack ID'
-        required: true
-      receipt_integrity:
-        description: 'PASS or FAIL'
-        required: true
-      claim_check:
-        description: 'PASS, FAIL, or N/A'
-        required: true
-      n_receipts:
-        description: 'Number of receipts'
-        required: true
       source_repo:
         description: 'Source repo (owner/repo)'
         required: true
-      mode:
-        description: 'Pack mode'
+      pack_manifest_b64:
+        description: 'Base64-encoded pack_manifest.json (enables L2 witness verification)'
         required: false
         default: ''
-      timestamp_start:
-        description: 'Run start time (ISO 8601)'
+      pack_id:
+        description: 'Pack ID (ignored if manifest provided)'
         required: false
         default: ''
-      signer_pubkey_sha256:
-        description: 'Signer public key SHA-256'
+      receipt_integrity:
+        description: 'PASS or FAIL (ignored if manifest provided)'
         required: false
         default: ''
-      verifier_version:
-        description: 'assay-ai version'
+      claim_check:
+        description: 'PASS, FAIL, or N/A (ignored if manifest provided)'
+        required: false
+        default: ''
+      n_receipts:
+        description: 'Number of receipts (ignored if manifest provided)'
         required: false
         default: ''
 
@@ -51,6 +43,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install PyNaCl
+        run: pip install pynacl --quiet
 
       - name: Check for duplicate
         id: check
@@ -80,19 +75,17 @@ jobs:
               out.write("duplicate=false\n")
           PY
 
-      - name: Append entry
+      - name: Witness verify and build entry
+        id: build
         if: steps.check.outputs.duplicate == 'false'
         env:
           INPUT_PACK_ROOT_SHA256: ${{ inputs.pack_root_sha256 }}
+          INPUT_SOURCE_REPO: ${{ inputs.source_repo }}
+          INPUT_PACK_MANIFEST_B64: ${{ inputs.pack_manifest_b64 }}
           INPUT_PACK_ID: ${{ inputs.pack_id }}
           INPUT_RECEIPT_INTEGRITY: ${{ inputs.receipt_integrity }}
           INPUT_CLAIM_CHECK: ${{ inputs.claim_check }}
           INPUT_N_RECEIPTS: ${{ inputs.n_receipts }}
-          INPUT_SOURCE_REPO: ${{ inputs.source_repo }}
-          INPUT_MODE: ${{ inputs.mode }}
-          INPUT_TIMESTAMP_START: ${{ inputs.timestamp_start }}
-          INPUT_SIGNER_PUBKEY_SHA256: ${{ inputs.signer_pubkey_sha256 }}
-          INPUT_VERIFIER_VERSION: ${{ inputs.verifier_version }}
         run: |
           python3 - <<'PY'
           import json, os, re, sys
@@ -101,74 +94,93 @@ jobs:
           SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
           VALID_INTEGRITY = {"PASS", "FAIL"}
           VALID_CLAIM = {"PASS", "FAIL", "N/A"}
+          REPO_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
 
-          def req(key):
-              v = os.environ.get(key, "").strip()
-              if not v:
-                  print(f"::error::Missing required input: {key}", file=sys.stderr)
-                  sys.exit(1)
-              return v
+          root = os.environ["INPUT_PACK_ROOT_SHA256"].strip()
+          source_repo = os.environ["INPUT_SOURCE_REPO"].strip()
+          manifest_b64 = os.environ.get("INPUT_PACK_MANIFEST_B64", "").strip()
 
-          def opt(key):
-              return os.environ.get(key, "").strip() or None
-
-          # Build entry from env vars (never from string interpolation)
-          root = req("INPUT_PACK_ROOT_SHA256")
-          if not SHA256_RE.match(root):
+          if not root or not SHA256_RE.match(root):
               print("::error::pack_root_sha256 is not valid hex SHA-256", file=sys.stderr)
               sys.exit(1)
-
-          integrity = req("INPUT_RECEIPT_INTEGRITY")
-          if integrity not in VALID_INTEGRITY:
-              print(f"::error::receipt_integrity must be PASS or FAIL, got '{integrity}'", file=sys.stderr)
+          if not source_repo or not REPO_RE.match(source_repo):
+              print("::error::source_repo must match owner/repo format", file=sys.stderr)
               sys.exit(1)
 
-          claim = req("INPUT_CLAIM_CHECK")
-          if claim not in VALID_CLAIM:
-              print(f"::error::claim_check must be PASS/FAIL/N/A, got '{claim}'", file=sys.stderr)
-              sys.exit(1)
+          now = datetime.now(timezone.utc).isoformat()
 
-          try:
-              n_receipts = int(req("INPUT_N_RECEIPTS"))
-          except ValueError:
-              print("::error::n_receipts must be an integer", file=sys.stderr)
-              sys.exit(1)
+          if manifest_b64:
+              # === WITNESSED PATH: build entry from witness-extracted fields ===
+              from witness_verify import witness_verify
+              result = witness_verify(manifest_b64, root)
 
-          entry = {
-              "schema_version": 1,
-              "pack_root_sha256": root,
-              "pack_id": req("INPUT_PACK_ID"),
-              "receipt_integrity": integrity,
-              "claim_check": claim,
-              "n_receipts": n_receipts,
-              "submitted_at": datetime.now(timezone.utc).isoformat(),
-              "source_repo": req("INPUT_SOURCE_REPO"),
-          }
-
-          # Optional fields: only include if non-empty
-          mode = opt("INPUT_MODE")
-          if mode:
-              entry["mode"] = mode
-
-          ts = opt("INPUT_TIMESTAMP_START")
-          if ts:
-              entry["timestamp_start"] = ts
-
-          signer = opt("INPUT_SIGNER_PUBKEY_SHA256")
-          if signer:
-              if not SHA256_RE.match(signer):
-                  print("::error::signer_pubkey_sha256 is not valid hex SHA-256", file=sys.stderr)
+              if not result.ok:
+                  print("::error::Witness verification failed:", file=sys.stderr)
+                  for e in result.errors:
+                      print(f"  - {e}", file=sys.stderr)
                   sys.exit(1)
-              entry["signer_pubkey_sha256"] = signer
 
-          ver = opt("INPUT_VERIFIER_VERSION")
-          if ver:
-              entry["verifier_version"] = ver
+              ext = result.extracted
+              entry = {
+                  "schema_version": 1,
+                  "pack_root_sha256": ext["pack_root_sha256"],
+                  "pack_id": ext.get("pack_id", ""),
+                  "receipt_integrity": ext.get("receipt_integrity", "UNKNOWN"),
+                  "claim_check": ext.get("claim_check", "N/A"),
+                  "n_receipts": ext.get("n_receipts", 0),
+                  "submitted_at": now,
+                  "source_repo": source_repo,
+                  "witness_status": result.witness_status,
+              }
+              # Add optional fields from witness extraction
+              for key in ("mode", "assurance_level", "timestamp_start", "timestamp_end",
+                          "signer_pubkey_sha256", "verifier_version"):
+                  val = ext.get(key)
+                  if val:
+                      entry[key] = val
+
+              print(f"Witness: {result.witness_status}")
+          else:
+              # === UNWITNESSED PATH: accept self-reported fields ===
+              pack_id = os.environ.get("INPUT_PACK_ID", "").strip()
+              integrity = os.environ.get("INPUT_RECEIPT_INTEGRITY", "").strip()
+              claim = os.environ.get("INPUT_CLAIM_CHECK", "").strip()
+              n_str = os.environ.get("INPUT_N_RECEIPTS", "").strip()
+
+              if not pack_id or not integrity or not claim or not n_str:
+                  print("::error::Without pack_manifest_b64, pack_id/receipt_integrity/claim_check/n_receipts are required",
+                        file=sys.stderr)
+                  sys.exit(1)
+              if integrity not in VALID_INTEGRITY:
+                  print(f"::error::receipt_integrity must be PASS or FAIL", file=sys.stderr)
+                  sys.exit(1)
+              if claim not in VALID_CLAIM:
+                  print(f"::error::claim_check must be PASS/FAIL/N/A", file=sys.stderr)
+                  sys.exit(1)
+              try:
+                  n_receipts = int(n_str)
+              except ValueError:
+                  print("::error::n_receipts must be an integer", file=sys.stderr)
+                  sys.exit(1)
+
+              entry = {
+                  "schema_version": 1,
+                  "pack_root_sha256": root,
+                  "pack_id": pack_id,
+                  "receipt_integrity": integrity,
+                  "claim_check": claim,
+                  "n_receipts": n_receipts,
+                  "submitted_at": now,
+                  "source_repo": source_repo,
+                  "witness_status": "unwitnessed",
+              }
+              print("Warning: no manifest provided, entry is unwitnessed")
 
           with open("ledger.jsonl", "a") as f:
               f.write(json.dumps(entry, separators=(",", ":")) + "\n")
 
-          print(f"Appended: {root[:16]}... ({entry['pack_id']})")
+          print(f"Appended: {entry['pack_root_sha256'][:16]}... ({entry.get('pack_id', '?')})")
+          print(f"  witness_status={entry.get('witness_status', 'unwitnessed')}")
           PY
 
       - name: Validate
@@ -189,7 +201,6 @@ jobs:
           git commit -m "ledger: append entry"
           git push origin "$BRANCH"
 
-          # Build PR body from env (no input interpolation in shell)
           python3 - <<'PY'
           import os, subprocess
           root = os.environ["INPUT_PACK_ROOT_SHA256"]

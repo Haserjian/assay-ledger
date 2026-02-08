@@ -116,6 +116,17 @@ class TestEnums:
     def test_claim_check_na_valid(self):
         must_pass(entry(claim_check="N/A"))
 
+    def test_witness_status_valid_values(self):
+        must_pass(entry(witness_status="unwitnessed"))
+        must_pass(entry(witness_status="hash_verified"))
+        must_pass(entry(witness_status="signature_verified"))
+
+    def test_witness_status_invalid_value(self):
+        must_fail(entry(witness_status="full_verified"), "witness_status must be one of")
+
+    def test_witness_status_optional(self):
+        must_pass(VALID_ENTRY)  # no witness_status present
+
     def test_schema_version_wrong(self):
         must_fail(entry(schema_version=2), "schema_version must be 1")
 

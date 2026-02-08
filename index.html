@@ -81,6 +81,17 @@
   .mono { font-family: var(--mono); font-size: 0.8rem; }
   .source-link { color: var(--blue); text-decoration: none; }
   .source-link:hover { text-decoration: underline; }
+  .witness-badge {
+    display: inline-block;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    font-family: var(--mono);
+  }
+  .witness-sig { background: rgba(63,185,80,0.15); color: var(--green); }
+  .witness-hash { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .witness-none { background: rgba(139,148,158,0.15); color: var(--text-muted); }
   .footer {
     margin-top: 2rem;
     padding-top: 1rem;
@@ -145,6 +156,7 @@ assay verify-pack ./path/to/proof_pack_dir/
     <tr>
       <th>#</th>
       <th>Pack ID</th>
+      <th>Witness</th>
       <th>Integrity</th>
       <th>Claims</th>
       <th>Receipts</th>
@@ -206,8 +218,11 @@ assay verify-pack ./path/to/proof_pack_dir/
       div.appendChild(lblDiv);
       statsDiv.appendChild(div);
     }
+    const witnessedCount = entries.filter(e => e.witness_status === 'signature_verified' || e.witness_status === 'hash_verified').length;
+
     addStat(entries.length, 'Total Packs', '');
     addStat(passCount, 'All Pass', 'pass');
+    if (witnessedCount) addStat(witnessedCount, 'Witnessed', 'pass');
     if (claimFailCount) addStat(claimFailCount, 'Claim Fail', 'fail');
     if (integrityFailCount) addStat(integrityFailCount, 'Integrity Fail', 'fail');
     addStat(totalReceipts, 'Total Receipts', '');
@@ -243,6 +258,27 @@ assay verify-pack ./path/to/proof_pack_dir/
       return el;
     }
 
+    function tdWitness(status) {
+      const el = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = 'witness-badge';
+      if (status === 'signature_verified') {
+        badge.classList.add('witness-sig');
+        badge.textContent = 'SIG';
+        badge.title = 'Signature verified by ledger witness';
+      } else if (status === 'hash_verified') {
+        badge.classList.add('witness-hash');
+        badge.textContent = 'HASH';
+        badge.title = 'Hash chain verified, signature not checked';
+      } else {
+        badge.classList.add('witness-none');
+        badge.textContent = 'SELF';
+        badge.title = 'Self-reported, not independently verified';
+      }
+      el.appendChild(badge);
+      return el;
+    }
+
     // Table rows (newest first)
     entries.reverse().forEach((entry, i) => {
       const num = entries.length - i;
@@ -259,6 +295,7 @@ assay verify-pack ./path/to/proof_pack_dir/
 
       tr.appendChild(td(String(num), 'mono'));
       tr.appendChild(td(entry.pack_id || '?', 'mono'));
+      tr.appendChild(tdWitness(entry.witness_status));
       tr.appendChild(td(entry.receipt_integrity || '?', intClass));
       tr.appendChild(td(entry.claim_check || '?', claimClass));
       tr.appendChild(td(String(entry.n_receipts ?? '?'), 'mono'));

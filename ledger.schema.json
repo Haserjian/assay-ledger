@@ -81,6 +81,11 @@
     "verifier_version": {
       "type": "string",
       "description": "Version of assay-ai that verified the pack"
+    },
+    "witness_status": {
+      "type": "string",
+      "enum": ["unwitnessed", "hash_verified", "signature_verified"],
+      "description": "Level of independent verification performed by the ledger"
     }
   },
   "additionalProperties": false

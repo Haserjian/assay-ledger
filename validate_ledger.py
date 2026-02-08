@@ -20,6 +20,7 @@ CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 SOURCE_REPO_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
 VALID_INTEGRITY = {"PASS", "FAIL"}
 VALID_CLAIM = {"PASS", "FAIL", "N/A"}
+VALID_WITNESS = {"unwitnessed", "hash_verified", "signature_verified"}
 
 # Max lengths for string fields (bytes)
 MAX_LENGTHS = {
@@ -50,6 +51,7 @@ OPTIONAL_FIELDS = {
     "source_workflow",
     "signer_pubkey_sha256",
     "verifier_version",
+    "witness_status",
 }
 
 ALL_FIELDS = REQUIRED_FIELDS | OPTIONAL_FIELDS
@@ -107,6 +109,11 @@ def validate_entry(entry: dict, line_num: int) -> list[str]:
                 datetime.fromisoformat(s)
             except (ValueError, TypeError):
                 errors.append(f"line {line_num}: {dt_field} is not a valid ISO 8601 datetime")
+
+    # witness_status enum
+    witness = entry.get("witness_status")
+    if witness is not None and witness not in VALID_WITNESS:
+        errors.append(f"line {line_num}: witness_status must be one of {VALID_WITNESS}, got '{witness}'")
 
     # Control character rejection (all string values)
     for key, val in entry.items():
