@@ -97,8 +97,16 @@ Required fields: `schema_version`, `pack_root_sha256`, `pack_id`, `receipt_integ
 
 Optional fields: `timestamp_start`, `timestamp_end`, `mode`, `assurance_level`, `source_workflow`, `signer_pubkey_sha256`, `verifier_version`, `witness_status`.
 
+## Related Repos
+
+| Repo | Role |
+|------|------|
+| [assay](https://github.com/Haserjian/assay) | Core CLI + SDK (canonical source) |
+| [assay-verify-action](https://github.com/Haserjian/assay-verify-action) | GitHub Action for CI verification |
+| [assay-ledger](https://github.com/Haserjian/assay-ledger) | Public transparency ledger (this repo) |
+
 ## Links
 
 - [assay-ai on PyPI](https://pypi.org/project/assay-ai/)
-- [Assay source](https://github.com/Haserjian/ccio)
+- [Assay source](https://github.com/Haserjian/assay)
 - [Assay Verify Action](https://github.com/Haserjian/assay-verify-action)
