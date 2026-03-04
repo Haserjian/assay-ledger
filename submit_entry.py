@@ -43,6 +43,21 @@ def extract_entry(pack_dir: Path, source_repo: str) -> dict:
         "source_repo": source_repo,
     }
 
+    # Witness status: check for witness_bundle.json in the pack
+    witness_bundle_path = pack_dir / "witness_bundle.json"
+    if witness_bundle_path.exists():
+        try:
+            wb = json.loads(witness_bundle_path.read_text())
+            # If the bundle has a verified TSA response, it's signature_verified
+            if wb.get("tsa_response_b64"):
+                entry["witness_status"] = "signature_verified"
+            else:
+                entry["witness_status"] = "hash_verified"
+        except (json.JSONDecodeError, OSError):
+            entry["witness_status"] = "unwitnessed"
+    else:
+        entry["witness_status"] = "unwitnessed"
+
     # Optional fields: only include when non-empty
     for key, val in [
         ("mode", att.get("mode")),

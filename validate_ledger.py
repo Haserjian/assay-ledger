@@ -41,6 +41,7 @@ REQUIRED_FIELDS = {
     "n_receipts",
     "submitted_at",
     "source_repo",
+    "witness_status",
 }
 
 OPTIONAL_FIELDS = {
@@ -51,7 +52,6 @@ OPTIONAL_FIELDS = {
     "source_workflow",
     "signer_pubkey_sha256",
     "verifier_version",
-    "witness_status",
 }
 
 ALL_FIELDS = REQUIRED_FIELDS | OPTIONAL_FIELDS

@@ -11,7 +11,8 @@
     "claim_check",
     "n_receipts",
     "submitted_at",
-    "source_repo"
+    "source_repo",
+    "witness_status"
   ],
   "properties": {
     "schema_version": {

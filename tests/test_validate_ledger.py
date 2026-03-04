@@ -25,6 +25,7 @@ VALID_ENTRY = {
     "n_receipts": 5,
     "submitted_at": "2026-02-08T00:00:00+00:00",
     "source_repo": "Haserjian/ccio",
+    "witness_status": "unwitnessed",
 }
 
 
@@ -124,8 +125,10 @@ class TestEnums:
     def test_witness_status_invalid_value(self):
         must_fail(entry(witness_status="full_verified"), "witness_status must be one of")
 
-    def test_witness_status_optional(self):
-        must_pass(VALID_ENTRY)  # no witness_status present
+    def test_witness_status_required(self):
+        e = deepcopy(VALID_ENTRY)
+        del e["witness_status"]
+        must_fail(e, "missing required field 'witness_status'")
 
     def test_schema_version_wrong(self):
         must_fail(entry(schema_version=2), "schema_version must be 1")
