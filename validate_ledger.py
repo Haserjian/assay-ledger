@@ -6,6 +6,7 @@ Used by CI to gate all ledger PRs.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -52,6 +53,7 @@ OPTIONAL_FIELDS = {
     "source_workflow",
     "signer_pubkey_sha256",
     "verifier_version",
+    "prev_entry_hash",
 }
 
 ALL_FIELDS = REQUIRED_FIELDS | OPTIONAL_FIELDS
@@ -115,6 +117,11 @@ def validate_entry(entry: dict, line_num: int) -> list[str]:
     if witness is not None and witness not in VALID_WITNESS:
         errors.append(f"line {line_num}: witness_status must be one of {VALID_WITNESS}, got '{witness}'")
 
+    # prev_entry_hash format (if present)
+    prev_hash = entry.get("prev_entry_hash")
+    if prev_hash is not None and not SHA256_RE.match(prev_hash):
+        errors.append(f"line {line_num}: prev_entry_hash is not a valid SHA-256 hex string")
+
     # Control character rejection (all string values)
     for key, val in entry.items():
         if isinstance(val, str) and CONTROL_CHAR_RE.search(val):
@@ -141,10 +148,11 @@ def validate_ledger(path: Path) -> list[str]:
 
     errors: list[str] = []
     seen_roots: dict[str, int] = {}
+    prev_line_hash: str | None = None
 
     with open(path) as f:
-        for line_num, line in enumerate(f, 1):
-            line = line.strip()
+        for line_num, raw_line in enumerate(f, 1):
+            line = raw_line.strip()
             if not line:
                 continue
 
@@ -152,9 +160,26 @@ def validate_ledger(path: Path) -> list[str]:
                 entry = json.loads(line)
             except json.JSONDecodeError as e:
                 errors.append(f"line {line_num}: invalid JSON: {e}")
+                prev_line_hash = hashlib.sha256(line.encode()).hexdigest()
                 continue
 
             errors.extend(validate_entry(entry, line_num))
+
+            # Hash chain verification (if prev_entry_hash present)
+            chain_hash = entry.get("prev_entry_hash")
+            if chain_hash is not None:
+                if prev_line_hash is not None and chain_hash != prev_line_hash:
+                    errors.append(
+                        f"line {line_num}: prev_entry_hash mismatch: "
+                        f"expected {prev_line_hash[:16]}..., "
+                        f"got {chain_hash[:16]}..."
+                    )
+                elif prev_line_hash is None and line_num > 1:
+                    # First chained entry but not first line — that's ok,
+                    # chain starts wherever prev_entry_hash first appears
+                    pass
+
+            prev_line_hash = hashlib.sha256(line.encode()).hexdigest()
 
             # Uniqueness: pack_root_sha256 must not repeat
             root = entry.get("pack_root_sha256", "")

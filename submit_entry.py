@@ -13,6 +13,8 @@ and exits 0 without duplicating.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -43,20 +45,14 @@ def extract_entry(pack_dir: Path, source_repo: str) -> dict:
         "source_repo": source_repo,
     }
 
-    # Witness status: check for witness_bundle.json in the pack
-    witness_bundle_path = pack_dir / "witness_bundle.json"
-    if witness_bundle_path.exists():
-        try:
-            wb = json.loads(witness_bundle_path.read_text())
-            # If the bundle has a verified TSA response, it's signature_verified
-            if wb.get("tsa_response_b64"):
-                entry["witness_status"] = "signature_verified"
-            else:
-                entry["witness_status"] = "hash_verified"
-        except (json.JSONDecodeError, OSError):
-            entry["witness_status"] = "unwitnessed"
-    else:
-        entry["witness_status"] = "unwitnessed"
+    # Witness status: re-verify pack manifest cryptographically
+    # Import the ledger's own witness_verify module for independent re-verification
+    from witness_verify import witness_verify
+
+    manifest_b64 = base64.b64encode(manifest_path.read_bytes()).decode()
+    pack_root = entry["pack_root_sha256"]
+    wresult = witness_verify(manifest_b64, pack_root)
+    entry["witness_status"] = wresult.witness_status
 
     # Optional fields: only include when non-empty
     for key, val in [
@@ -71,6 +67,21 @@ def extract_entry(pack_dir: Path, source_repo: str) -> dict:
             entry[key] = val
 
     return entry
+
+
+def _last_line_hash() -> str | None:
+    """Return SHA-256 of the last non-empty line in the ledger, or None."""
+    if not LEDGER_PATH.exists():
+        return None
+    last_line = ""
+    with open(LEDGER_PATH) as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped:
+                last_line = stripped
+    if not last_line:
+        return None
+    return hashlib.sha256(last_line.encode()).hexdigest()
 
 
 def already_in_ledger(root_sha256: str) -> bool:
@@ -104,6 +115,11 @@ def main() -> int:
     if already_in_ledger(entry["pack_root_sha256"]):
         print(f"Already in ledger: {entry['pack_root_sha256'][:16]}... ({entry['pack_id']})")
         return 0
+
+    # Compute prev_entry_hash from last line of ledger (hash chain)
+    prev_hash = _last_line_hash()
+    if prev_hash:
+        entry["prev_entry_hash"] = prev_hash
 
     with open(LEDGER_PATH, "a") as f:
         f.write(json.dumps(entry, separators=(",", ":")) + "\n")

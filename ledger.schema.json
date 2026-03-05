@@ -87,6 +87,11 @@
       "type": "string",
       "enum": ["unwitnessed", "hash_verified", "signature_verified"],
       "description": "Level of independent verification performed by the ledger"
+    },
+    "prev_entry_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 of the previous JSONL line (hash chain for append-only integrity)"
     }
   },
   "additionalProperties": false

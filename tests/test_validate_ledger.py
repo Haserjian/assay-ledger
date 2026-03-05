@@ -5,6 +5,7 @@ that the validator MUST reject or handle correctly.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import tempfile
@@ -299,6 +300,29 @@ class TestLedgerLevel:
             f.write(json.dumps(VALID_ENTRY, separators=(",", ":")) + "\n")
         errors = validate_ledger(Path(f.name))
         assert not errors, f"unexpected errors: {errors}"
+
+    def test_hash_chain_valid(self):
+        line1 = json.dumps(VALID_ENTRY, separators=(",", ":"))
+        line1_hash = hashlib.sha256(line1.encode()).hexdigest()
+        entry2 = deepcopy(VALID_ENTRY)
+        entry2["pack_root_sha256"] = "b" * 64
+        entry2["prev_entry_hash"] = line1_hash
+        line2 = json.dumps(entry2, separators=(",", ":"))
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            f.write(line1 + "\n" + line2 + "\n")
+        errors = validate_ledger(Path(f.name))
+        assert not errors, f"unexpected errors: {errors}"
+
+    def test_hash_chain_broken(self):
+        line1 = json.dumps(VALID_ENTRY, separators=(",", ":"))
+        entry2 = deepcopy(VALID_ENTRY)
+        entry2["pack_root_sha256"] = "b" * 64
+        entry2["prev_entry_hash"] = "c" * 64  # wrong hash
+        line2 = json.dumps(entry2, separators=(",", ":"))
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            f.write(line1 + "\n" + line2 + "\n")
+        errors = validate_ledger(Path(f.name))
+        assert any("prev_entry_hash mismatch" in e for e in errors)
 
     def test_missing_file(self):
         errors = validate_ledger(Path("/nonexistent/path.jsonl"))
