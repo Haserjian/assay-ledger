@@ -29,7 +29,7 @@ Entries submitted with a `pack_manifest.json` are **independently witnessed** by
 ## How to verify any entry
 
 ```bash
-pip install assay-ai
+pip install assay-ai   # on Windows: py -m pip install assay-ai
 
 # Verify a pack you received
 assay verify-pack ./proof_pack_dir/
