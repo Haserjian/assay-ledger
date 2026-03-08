@@ -104,6 +104,7 @@ Optional fields: `timestamp_start`, `timestamp_end`, `mode`, `assurance_level`, 
 | [assay](https://github.com/Haserjian/assay) | Core CLI + SDK (canonical source) |
 | [assay-verify-action](https://github.com/Haserjian/assay-verify-action) | GitHub Action for CI verification |
 | [assay-ledger](https://github.com/Haserjian/assay-ledger) | Public transparency ledger (this repo) |
+| [assay-proof-gallery](https://github.com/Haserjian/assay-proof-gallery) | Live demo packs (PASS / HONEST FAIL / TAMPERED) |
 
 ## Links
 
