@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 LEDGER_PATH = Path(__file__).parent / "ledger.jsonl"
+VALID_RECEIPT_INTEGRITY = {"PASS", "FAIL"}
 
 
 def extract_entry(pack_dir: Path, source_repo: str) -> dict:
@@ -32,13 +33,23 @@ def extract_entry(pack_dir: Path, source_repo: str) -> dict:
 
     manifest = json.loads(manifest_path.read_text())
     att = manifest.get("attestation", {})
+    if not isinstance(att, dict):
+        att = {}
+
+    receipt_integrity = att.get("receipt_integrity")
+    if receipt_integrity not in VALID_RECEIPT_INTEGRITY:
+        print(
+            "ERROR: pack manifest must include attestation.receipt_integrity as PASS or FAIL",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Required fields
     entry = {
         "schema_version": 1,
         "pack_root_sha256": manifest.get("pack_root_sha256", manifest.get("attestation_sha256", "")),
         "pack_id": att.get("pack_id", manifest.get("pack_id", "")),
-        "receipt_integrity": att.get("receipt_integrity", "UNKNOWN"),
+        "receipt_integrity": receipt_integrity,
         "claim_check": att.get("claim_check", "N/A"),
         "n_receipts": att.get("n_receipts", 0),
         "submitted_at": datetime.now(timezone.utc).isoformat(),
