@@ -1,5 +1,7 @@
 # Assay Public Ledger
 
+> Assay Ledger is the append-only transparency layer in the [Assay](https://github.com/Haserjian/assay) ecosystem.
+
 Append-only public record of **cryptographically witnessed** AI evidence bundles ([Proof Packs](https://pypi.org/project/assay-ai/)).
 
 **Live at:** [https://haserjian.github.io/assay-ledger/](https://haserjian.github.io/assay-ledger/)
