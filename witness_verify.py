@@ -43,7 +43,19 @@ except ImportError:
 
 @dataclass
 class WitnessResult:
-    """Result of witness verification."""
+    """Result of witness verification.
+
+    Trust-tier acceptance policy:
+      - signature_verified + ok: full cryptographic witness, accepted
+      - hash_verified + ok: attestation chain intact but no signature
+        material available; accepted as a weaker but valid witness tier
+      - hash_verified + errors: degraded state (e.g. PyNaCl unavailable,
+        bad base64); REJECTED — errors must be empty for acceptance
+      - unwitnessed + errors: verification failed; REJECTED
+
+    The workflow treats ok (len(errors) == 0) as the sole acceptance gate.
+    witness_status indicates the *tier* of trust achieved, not pass/fail.
+    """
     witness_status: str  # "unwitnessed" | "hash_verified" | "signature_verified"
     errors: list[str] = field(default_factory=list)
     extracted: dict = field(default_factory=dict)

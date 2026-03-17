@@ -324,6 +324,36 @@ class TestLedgerLevel:
         errors = validate_ledger(Path(f.name))
         assert any("prev_entry_hash mismatch" in e for e in errors)
 
+    def test_chain_continuity_enforced(self):
+        """Once prev_entry_hash appears, all subsequent entries must have it."""
+        line1 = json.dumps(VALID_ENTRY, separators=(",", ":"))
+        line1_hash = hashlib.sha256(line1.encode()).hexdigest()
+        entry2 = deepcopy(VALID_ENTRY)
+        entry2["pack_root_sha256"] = "b" * 64
+        entry2["prev_entry_hash"] = line1_hash
+        line2 = json.dumps(entry2, separators=(",", ":"))
+        # entry3 drops prev_entry_hash after chain was started
+        entry3 = deepcopy(VALID_ENTRY)
+        entry3["pack_root_sha256"] = "c" * 64
+        line3 = json.dumps(entry3, separators=(",", ":"))
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            f.write(line1 + "\n" + line2 + "\n" + line3 + "\n")
+        errors = validate_ledger(Path(f.name))
+        assert any("chain continuity required" in e for e in errors)
+
+    def test_unchained_entries_before_chain_starts_are_valid(self):
+        """Entries before the first prev_entry_hash are grandfathered."""
+        line1 = json.dumps(VALID_ENTRY, separators=(",", ":"))
+        entry2 = deepcopy(VALID_ENTRY)
+        entry2["pack_root_sha256"] = "b" * 64
+        line2 = json.dumps(entry2, separators=(",", ":"))
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            f.write(line1 + "\n" + line2 + "\n")
+        errors = validate_ledger(Path(f.name))
+        # Only expect duplicate error, not chain errors
+        chain_errors = [e for e in errors if "chain continuity" in e or "prev_entry_hash" in e]
+        assert not chain_errors, f"unexpected chain errors: {chain_errors}"
+
     def test_missing_file(self):
         errors = validate_ledger(Path("/nonexistent/path.jsonl"))
         assert any("not found" in e for e in errors)

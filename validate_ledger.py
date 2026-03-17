@@ -149,6 +149,7 @@ def validate_ledger(path: Path) -> list[str]:
     errors: list[str] = []
     seen_roots: dict[str, int] = {}
     prev_line_hash: str | None = None
+    chain_started = False  # True once any entry has prev_entry_hash
 
     with open(path) as f:
         for line_num, raw_line in enumerate(f, 1):
@@ -165,19 +166,22 @@ def validate_ledger(path: Path) -> list[str]:
 
             errors.extend(validate_entry(entry, line_num))
 
-            # Hash chain verification (if prev_entry_hash present)
+            # Hash chain verification
             chain_hash = entry.get("prev_entry_hash")
             if chain_hash is not None:
+                chain_started = True
                 if prev_line_hash is not None and chain_hash != prev_line_hash:
                     errors.append(
                         f"line {line_num}: prev_entry_hash mismatch: "
                         f"expected {prev_line_hash[:16]}..., "
                         f"got {chain_hash[:16]}..."
                     )
-                elif prev_line_hash is None and line_num > 1:
-                    # First chained entry but not first line — that's ok,
-                    # chain starts wherever prev_entry_hash first appears
-                    pass
+            elif chain_started:
+                # Once chaining starts, all subsequent entries must continue it
+                errors.append(
+                    f"line {line_num}: missing prev_entry_hash "
+                    f"(chain continuity required after first chained entry)"
+                )
 
             prev_line_hash = hashlib.sha256(line.encode()).hexdigest()
 

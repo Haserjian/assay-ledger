@@ -176,6 +176,24 @@ jobs:
               }
               print("Warning: no manifest provided, entry is unwitnessed")
 
+          # Compute prev_entry_hash from the last line of the existing ledger
+          prev_hash = None
+          try:
+              with open("ledger.jsonl") as f:
+                  last_line = ""
+                  for raw in f:
+                      stripped = raw.strip()
+                      if stripped:
+                          last_line = stripped
+              if last_line:
+                  import hashlib
+                  prev_hash = hashlib.sha256(last_line.encode()).hexdigest()
+          except FileNotFoundError:
+              pass
+
+          if prev_hash:
+              entry["prev_entry_hash"] = prev_hash
+
           with open("ledger.jsonl", "a") as f:
               f.write(json.dumps(entry, separators=(",", ":")) + "\n")
 
