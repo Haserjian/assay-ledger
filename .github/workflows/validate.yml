@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
 
 permissions:
   contents: read
@@ -29,23 +30,25 @@ jobs:
       - name: Validate ledger.jsonl
         run: python validate_ledger.py
 
-      - name: Check append-only (PRs only)
-        if: github.event_name == 'pull_request'
+      - name: Check append invariant (PRs and merge queue)
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         run: |
-          # Fetch base branch ledger
-          git fetch origin ${{ github.base_ref }}
-          git show origin/${{ github.base_ref }}:ledger.jsonl > /tmp/base_ledger.jsonl 2>/dev/null || touch /tmp/base_ledger.jsonl
-
-          # Every line in base must appear in PR version, in order
-          BASE_LINES=$(wc -l < /tmp/base_ledger.jsonl | tr -d ' ')
-          if [ "$BASE_LINES" -gt 0 ]; then
-            HEAD_PREFIX=$(head -n "$BASE_LINES" ledger.jsonl)
-            BASE_CONTENT=$(cat /tmp/base_ledger.jsonl)
-            if [ "$HEAD_PREFIX" != "$BASE_CONTENT" ]; then
-              echo "::error::Ledger is not append-only. Existing entries were modified or removed."
-              exit 1
-            fi
+          # Determine base ref
+          if [ "${{ github.event_name }}" = "merge_group" ]; then
+            BASE_REF="${{ github.event.merge_group.base_ref }}"
+          else
+            BASE_REF="origin/${{ github.base_ref }}"
           fi
 
-          NEW_LINES=$(($(wc -l < ledger.jsonl | tr -d ' ') - BASE_LINES))
-          echo "Append-only check passed. $NEW_LINES new entries."
+          # Fetch base branch and extract base ledger
+          git fetch origin "${{ github.base_ref || github.event.merge_group.base_ref }}" --depth=1 2>/dev/null || true
+          git show "${BASE_REF}:ledger.jsonl" > /tmp/base_ledger.jsonl 2>/dev/null || touch /tmp/base_ledger.jsonl
+
+          # Get changed files for scope check
+          CHANGED_FILES=$(git diff --name-only "${BASE_REF}"...HEAD 2>/dev/null || echo "ledger.jsonl")
+
+          # Run the invariant checker
+          python check_append_invariant.py \
+            /tmp/base_ledger.jsonl \
+            ledger.jsonl \
+            --changed-files $CHANGED_FILES
