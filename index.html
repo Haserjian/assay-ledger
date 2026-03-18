@@ -142,7 +142,7 @@
   <pre>pip install assay-ai
 assay verify-pack ./path/to/proof_pack_dir/
 
-# The pack_root_sha256 in your verify_report.json
+# The pack_root_sha256 in your pack_manifest.json
 # should match the hash shown in this ledger.</pre>
   <p>The ledger only stores attestation <em>pointers</em> (SHA-256 fingerprints), not the evidence itself.
   The pack author holds the original pack. If they share it with you, you can verify it matches
@@ -174,7 +174,7 @@ assay verify-pack ./path/to/proof_pack_dir/
     <a href="https://github.com/Haserjian/assay-ledger">Source</a> |
     <a href="ledger.jsonl">Raw JSONL</a>
   </p>
-  <p>Each entry is a SHA-256 attestation pointer. The ledger proves <em>when</em> a verification result was recorded, not that the evidence was honestly created. <a href="https://github.com/Haserjian/ccio">Learn more about Assay</a>.</p>
+  <p>Each entry is a SHA-256 attestation pointer. The ledger proves <em>when</em> a verification result was recorded, not that the evidence was honestly created or that the AI system is safe. <a href="https://github.com/Haserjian/assay">Learn more about Assay</a>.</p>
 </div>
 
 <script>
