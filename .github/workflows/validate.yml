@@ -22,13 +22,21 @@ jobs:
           python-version: '3.11'
 
       - name: Install test deps
-        run: pip install pytest --quiet
+        run: pip install pytest pynacl --quiet
 
       - name: Run adversarial regression tests
         run: python -m pytest tests/ -v
 
       - name: Validate ledger.jsonl
         run: python validate_ledger.py
+
+      - name: Verify latest checkpoint (if present)
+        run: |
+          if ls checkpoints/checkpoint_*.json 1>/dev/null 2>&1; then
+            python validate_ledger.py --require-checkpoint
+          else
+            echo "No checkpoints present — skipping checkpoint verification"
+          fi
 
       - name: Check append invariant (PRs and merge queue)
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'

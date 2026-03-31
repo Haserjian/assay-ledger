@@ -200,7 +200,11 @@ def validate_ledger(path: Path) -> list[str]:
 
 
 def main() -> int:
-    ledger = Path(sys.argv[1]) if len(sys.argv) > 1 else LEDGER_PATH
+    args = sys.argv[1:]
+    require_checkpoint = "--require-checkpoint" in args
+    args = [a for a in args if a != "--require-checkpoint"]
+
+    ledger = Path(args[0]) if args else LEDGER_PATH
     errors = validate_ledger(ledger)
 
     if errors:
@@ -213,6 +217,30 @@ def main() -> int:
     with open(ledger) as f:
         count = sum(1 for line in f if line.strip())
     print(f"PASS: {count} ledger entries validated")
+
+    if require_checkpoint:
+        checkpoints_dir = ledger.parent / "checkpoints"
+        cp_files = sorted(checkpoints_dir.glob("checkpoint_*.json")) if checkpoints_dir.exists() else []
+        if not cp_files:
+            print("FAIL: --require-checkpoint set but no checkpoint files found")
+            return 1
+
+        # Import here to keep dependency optional when flag not used
+        try:
+            from verify_checkpoint import verify_checkpoint
+        except ImportError as e:
+            print(f"FAIL: cannot import verify_checkpoint: {e}")
+            return 1
+
+        latest = cp_files[-1]
+        ok, cp_errors = verify_checkpoint(latest, ledger)
+        if not ok:
+            print(f"FAIL: latest checkpoint ({latest.name}) failed verification:")
+            for e in cp_errors:
+                print(f"  - {e}")
+            return 1
+        print(f"PASS: checkpoint {latest.name} verified")
+
     return 0
 
 
