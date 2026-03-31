@@ -18,6 +18,7 @@ on:
     branches: [main]
     paths:
       - 'ledger.jsonl'
+  workflow_dispatch:
 
 permissions:
   contents: write   # needed to commit the checkpoint back
@@ -38,26 +39,30 @@ jobs:
       - name: Install deps
         run: pip install pynacl --quiet
 
-      - name: Write signing key from secret
+      - name: Check secret and write signing key
+        id: write-key
         env:
           LEDGER_SIGNING_KEY: ${{ secrets.LEDGER_SIGNING_KEY }}
         run: |
           if [[ -z "$LEDGER_SIGNING_KEY" ]]; then
-            echo "::error::LEDGER_SIGNING_KEY secret is not set. Cannot sign checkpoint."
-            exit 1
+            echo "::warning::LEDGER_SIGNING_KEY not set — skipping T1 checkpoint. Add the secret to enable T1 signing."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            mkdir -p "$HOME/.assay/keys"
+            echo "$LEDGER_SIGNING_KEY" | base64 -d > "$HOME/.assay/keys/assay-ci.key"
+            chmod 600 "$HOME/.assay/keys/assay-ci.key"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
-          # create_checkpoint.py reads from ~/.assay/keys/{signer_id}.key
-          mkdir -p "$HOME/.assay/keys"
-          echo "$LEDGER_SIGNING_KEY" | base64 -d > "$HOME/.assay/keys/assay-ci.key"
-          chmod 600 "$HOME/.assay/keys/assay-ci.key"
 
       - name: Create signed checkpoint
+        if: steps.write-key.outputs.skip == 'false'
         run: |
           python create_checkpoint.py \
             --signer-id assay-ci \
             --ledger ledger.jsonl
 
       - name: Verify the new checkpoint
+        if: steps.write-key.outputs.skip == 'false'
         run: |
           LATEST=$(ls checkpoints/checkpoint_*.json | sort | tail -1)
           echo "Verifying: $LATEST"
@@ -65,6 +70,7 @@ jobs:
           echo "::notice title=T1 Checkpoint::Created and verified $LATEST (trust_tier=T1)"
 
       - name: Commit checkpoint to main
+        if: steps.write-key.outputs.skip == 'false'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
