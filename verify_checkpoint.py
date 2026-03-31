@@ -7,13 +7,16 @@ Checks:
   3. signer_pubkey_sha256 matches sha256(pubkey)
   4. ledger entry_count matches checkpoint (truncation detection)
   5. ledger tip_hash matches checkpoint (rewrite detection)
+  6. signer is in trusted registry with active status (when --registry PATH given)
+  7. signer meets minimum trust tier (when --require-t1 given)
 
 Exit 0 = valid.  Exit 1 = verification failure.
 
 Usage:
-    python verify_checkpoint.py <checkpoint.json> [--ledger PATH]
+    python verify_checkpoint.py <checkpoint.json> [--ledger PATH] [--registry PATH] [--require-t1]
     python verify_checkpoint.py checkpoints/checkpoint_0001.json
     python verify_checkpoint.py checkpoints/checkpoint_0001.json --ledger /path/to/ledger.jsonl
+    python verify_checkpoint.py checkpoints/checkpoint_0001.json --registry signers.json --require-t1
 """
 from __future__ import annotations
 
@@ -34,6 +37,9 @@ except ImportError:
     NACL_AVAILABLE = False
 
 DEFAULT_LEDGER = Path(__file__).parent / "ledger.jsonl"
+DEFAULT_REGISTRY = Path(__file__).parent / "signers.json"
+
+TRUST_TIER_ORDER = {"T0": 0, "T1": 1, "T2": 2}
 
 REQUIRED_CHECKPOINT_FIELDS = {
     "checkpoint_version",
@@ -46,6 +52,64 @@ REQUIRED_CHECKPOINT_FIELDS = {
     "signer_pubkey_sha256",
     "signature",
 }
+
+
+def _check_registry(
+    checkpoint: dict,
+    registry_path: Path,
+    require_t1: bool,
+) -> list[str]:
+    """Verify signer is in the trusted registry with active status.
+
+    Returns list of errors (empty = pass).
+    """
+    errors: list[str] = []
+
+    if not registry_path.exists():
+        errors.append(f"signer registry not found: {registry_path}")
+        return errors
+
+    try:
+        registry = json.loads(registry_path.read_text())
+    except json.JSONDecodeError as e:
+        errors.append(f"signer registry is not valid JSON: {e}")
+        return errors
+
+    signers = {s["signer_id"]: s for s in registry.get("signers", [])}
+    signer_id = checkpoint.get("signer_id", "")
+    pubkey_sha = checkpoint.get("signer_pubkey_sha256", "")
+
+    entry = signers.get(signer_id)
+    if entry is None:
+        errors.append(
+            f"signer '{signer_id}' is not in the trusted registry — "
+            "add an entry to signers.json and commit to main"
+        )
+        return errors
+
+    if entry.get("status") != "active":
+        errors.append(
+            f"signer '{signer_id}' is not active in registry "
+            f"(status={entry.get('status')!r})"
+        )
+
+    if entry.get("pubkey_sha256") != pubkey_sha:
+        errors.append(
+            f"registry pubkey_sha256 mismatch for signer '{signer_id}': "
+            f"registry has {entry.get('pubkey_sha256', '')[:16]}..., "
+            f"checkpoint has {pubkey_sha[:16]}..."
+        )
+
+    if require_t1:
+        tier = entry.get("trust_tier", "T0")
+        if TRUST_TIER_ORDER.get(tier, 0) < TRUST_TIER_ORDER["T1"]:
+            errors.append(
+                f"signer '{signer_id}' is trust tier {tier!r} — "
+                "T1 or higher required (--require-t1 set). "
+                "Provision a CI-bound key and add a T1 entry to signers.json."
+            )
+
+    return errors
 
 
 def _ledger_state(ledger_path: Path) -> tuple[int, str] | None:
@@ -61,11 +125,16 @@ def _ledger_state(ledger_path: Path) -> tuple[int, str] | None:
 def verify_checkpoint(
     checkpoint_path: Path,
     ledger_path: Path = DEFAULT_LEDGER,
+    registry_path: Path | None = None,
+    require_t1: bool = False,
 ) -> tuple[bool, list[str]]:
     """Verify a checkpoint file against the current ledger state.
 
     Returns (ok: bool, errors: list[str]).
     Fail-closed: any missing field, bad signature, or ledger mismatch is an error.
+
+    registry_path: if set, verify signer is in the trusted registry.
+    require_t1: if True, reject checkpoints signed by sub-T1 signers.
     """
     errors: list[str] = []
 
@@ -150,12 +219,33 @@ def verify_checkpoint(
     if errors:
         return False, errors
 
+    # --- Registry check (optional) ---
+    if registry_path is not None:
+        reg_errors = _check_registry(checkpoint, registry_path, require_t1)
+        if reg_errors:
+            errors.extend(reg_errors)
+            return False, errors
+
     return True, []
 
 
 def main() -> int:
     args = sys.argv[1:]
     ledger_path = DEFAULT_LEDGER
+    registry_path: Path | None = None
+    require_t1 = False
+
+    if "--require-t1" in args:
+        require_t1 = True
+        args = [a for a in args if a != "--require-t1"]
+
+    if "--registry" in args:
+        idx = args.index("--registry")
+        registry_path = Path(args[idx + 1])
+        args = args[:idx] + args[idx + 2:]
+    elif (Path(__file__).parent / "signers.json").exists():
+        # Auto-load registry if it exists alongside this script
+        registry_path = DEFAULT_REGISTRY
 
     if "--ledger" in args:
         idx = args.index("--ledger")
@@ -164,21 +254,35 @@ def main() -> int:
 
     if not args:
         print(
-            "Usage: python verify_checkpoint.py <checkpoint.json> [--ledger PATH]",
+            "Usage: python verify_checkpoint.py <checkpoint.json> "
+            "[--ledger PATH] [--registry PATH] [--require-t1]",
             file=sys.stderr,
         )
         return 1
 
     checkpoint_path = Path(args[0])
-    ok, errors = verify_checkpoint(checkpoint_path, ledger_path)
+    ok, errors = verify_checkpoint(
+        checkpoint_path, ledger_path,
+        registry_path=registry_path,
+        require_t1=require_t1,
+    )
 
     if ok:
         cp = json.loads(checkpoint_path.read_text())
+        tier_note = ""
+        if registry_path is not None:
+            try:
+                reg = json.loads(registry_path.read_text())
+                signers = {s["signer_id"]: s for s in reg.get("signers", [])}
+                entry = signers.get(cp.get("signer_id", ""), {})
+                tier_note = f"  trust_tier={entry.get('trust_tier', 'unknown')}"
+            except Exception:
+                pass
         print(
             f"PASS: checkpoint {cp.get('sequence_number')} verified\n"
             f"  entry_count={cp['entry_count']}  "
             f"tip={cp['tip_hash'][:16]}...  "
-            f"signer={cp['signer_id']}"
+            f"signer={cp['signer_id']}{tier_note}"
         )
         return 0
 

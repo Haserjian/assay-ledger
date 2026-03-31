@@ -293,3 +293,151 @@ class TestMalformedCheckpoint:
         ok, errors = verify_checkpoint(cp_path, ledger)
         assert not ok
         assert any("signer_pubkey_sha256" in e for e in errors)
+
+
+# --- Trust registry ---
+
+def _make_registry(tmp_path: Path, signers: list[dict]) -> Path:
+    reg = {"schema_version": "1", "signers": signers}
+    p = tmp_path / "signers.json"
+    p.write_text(json.dumps(reg))
+    return p
+
+
+class TestTrustRegistry:
+    def test_t0_signer_passes_without_require_t1(self, tmp_path):
+        """Registry check passes when signer is T0-active and --require-t1 not set."""
+        sk = _make_signing_key()
+        ledger = _make_ledger(tmp_path)
+        cp = _make_checkpoint(sk, ledger)
+        pubkey_sha = cp["signer_pubkey_sha256"]
+
+        registry = _make_registry(tmp_path, [{
+            "signer_id": "test-signer",
+            "pubkey_sha256": pubkey_sha,
+            "trust_tier": "T0",
+            "status": "active",
+            "valid_from": "2026-01-01",
+            "valid_until": None,
+            "notes": "",
+        }])
+        cp_path = _write_checkpoint(tmp_path, cp)
+        ok, errors = verify_checkpoint(cp_path, ledger, registry_path=registry, require_t1=False)
+        assert ok, f"unexpected errors: {errors}"
+
+    def test_t0_signer_rejected_when_require_t1(self, tmp_path):
+        """T0 signer must be rejected when --require-t1 is set."""
+        sk = _make_signing_key()
+        ledger = _make_ledger(tmp_path)
+        cp = _make_checkpoint(sk, ledger)
+        pubkey_sha = cp["signer_pubkey_sha256"]
+
+        registry = _make_registry(tmp_path, [{
+            "signer_id": "test-signer",
+            "pubkey_sha256": pubkey_sha,
+            "trust_tier": "T0",
+            "status": "active",
+            "valid_from": "2026-01-01",
+            "valid_until": None,
+            "notes": "",
+        }])
+        cp_path = _write_checkpoint(tmp_path, cp)
+        ok, errors = verify_checkpoint(cp_path, ledger, registry_path=registry, require_t1=True)
+        assert not ok
+        assert any("T0" in e and "T1" in e for e in errors), f"expected tier error, got: {errors}"
+
+    def test_t1_signer_passes_require_t1(self, tmp_path):
+        """T1 signer passes --require-t1 enforcement."""
+        sk = _make_signing_key()
+        ledger = _make_ledger(tmp_path)
+        cp = _make_checkpoint(sk, ledger)
+        pubkey_sha = cp["signer_pubkey_sha256"]
+
+        registry = _make_registry(tmp_path, [{
+            "signer_id": "test-signer",
+            "pubkey_sha256": pubkey_sha,
+            "trust_tier": "T1",
+            "status": "active",
+            "valid_from": "2026-01-01",
+            "valid_until": None,
+            "notes": "CI-bound key",
+        }])
+        cp_path = _write_checkpoint(tmp_path, cp)
+        ok, errors = verify_checkpoint(cp_path, ledger, registry_path=registry, require_t1=True)
+        assert ok, f"unexpected errors: {errors}"
+
+    def test_unregistered_signer_rejected(self, tmp_path):
+        """Signer not in registry must be rejected."""
+        sk = _make_signing_key()
+        ledger = _make_ledger(tmp_path)
+        cp = _make_checkpoint(sk, ledger)
+
+        # Empty registry — no signers
+        registry = _make_registry(tmp_path, [])
+        cp_path = _write_checkpoint(tmp_path, cp)
+        ok, errors = verify_checkpoint(cp_path, ledger, registry_path=registry)
+        assert not ok
+        assert any("not in the trusted registry" in e for e in errors), f"expected registry error, got: {errors}"
+
+    def test_inactive_signer_rejected(self, tmp_path):
+        """Signer with status != 'active' must be rejected even if pubkey matches."""
+        sk = _make_signing_key()
+        ledger = _make_ledger(tmp_path)
+        cp = _make_checkpoint(sk, ledger)
+        pubkey_sha = cp["signer_pubkey_sha256"]
+
+        registry = _make_registry(tmp_path, [{
+            "signer_id": "test-signer",
+            "pubkey_sha256": pubkey_sha,
+            "trust_tier": "T1",
+            "status": "revoked",
+            "valid_from": "2026-01-01",
+            "valid_until": "2026-03-01",
+            "notes": "Key was compromised",
+        }])
+        cp_path = _write_checkpoint(tmp_path, cp)
+        ok, errors = verify_checkpoint(cp_path, ledger, registry_path=registry)
+        assert not ok
+        assert any("not active" in e for e in errors), f"expected inactive error, got: {errors}"
+
+    def test_registry_pubkey_mismatch_rejected(self, tmp_path):
+        """Registry entry with wrong pubkey_sha256 must be rejected (key substitution attack)."""
+        sk = _make_signing_key()
+        ledger = _make_ledger(tmp_path)
+        cp = _make_checkpoint(sk, ledger)
+
+        registry = _make_registry(tmp_path, [{
+            "signer_id": "test-signer",
+            "pubkey_sha256": "a" * 64,  # wrong — doesn't match actual key
+            "trust_tier": "T0",
+            "status": "active",
+            "valid_from": "2026-01-01",
+            "valid_until": None,
+            "notes": "",
+        }])
+        cp_path = _write_checkpoint(tmp_path, cp)
+        ok, errors = verify_checkpoint(cp_path, ledger, registry_path=registry)
+        assert not ok
+        assert any("pubkey_sha256" in e for e in errors), f"expected pubkey mismatch error, got: {errors}"
+
+    def test_missing_registry_fails(self, tmp_path):
+        """Providing a registry path that doesn't exist must fail."""
+        sk = _make_signing_key()
+        ledger = _make_ledger(tmp_path)
+        cp = _make_checkpoint(sk, ledger)
+        cp_path = _write_checkpoint(tmp_path, cp)
+
+        absent_registry = tmp_path / "no_signers.json"
+        ok, errors = verify_checkpoint(cp_path, ledger, registry_path=absent_registry)
+        assert not ok
+        assert any("not found" in e for e in errors), f"expected not-found error, got: {errors}"
+
+    def test_no_registry_still_passes(self, tmp_path):
+        """When no registry is provided, verification passes on valid signature alone (T0 mode)."""
+        sk = _make_signing_key()
+        ledger = _make_ledger(tmp_path)
+        cp = _make_checkpoint(sk, ledger)
+        cp_path = _write_checkpoint(tmp_path, cp)
+
+        ok, errors = verify_checkpoint(cp_path, ledger, registry_path=None)
+        assert ok, f"unexpected errors: {errors}"

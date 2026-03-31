@@ -1,0 +1,24 @@
+{
+  "_comment": "Trusted signer registry for assay-ledger checkpoints. Each entry authorizes one signing identity. Do not edit manually — changes must be reviewed and committed to main.",
+  "schema_version": "1",
+  "signers": [
+    {
+      "signer_id": "assay-local",
+      "pubkey_sha256": "baaf5c953f29e840b0b066c420631367dd837b6992e757b9735639cabcccd13a",
+      "trust_tier": "T0",
+      "status": "active",
+      "valid_from": "2026-03-31",
+      "valid_until": null,
+      "notes": "Local development key. Proves no post-signing tampering; does not prove CI origin. Accepted during bootstrapping only."
+    },
+    {
+      "signer_id": "assay-ci",
+      "pubkey_sha256": "9320681bc09493580e845901c3599470caf98c4f2d34d45315a075451d37b48d",
+      "trust_tier": "T1",
+      "status": "active",
+      "valid_from": "2026-03-31",
+      "valid_until": null,
+      "notes": "GitHub Actions CI key. Signing workflow: checkpoint-sign.yml. Private seed stored in LEDGER_SIGNING_KEY Actions Secret."
+    }
+  ]
+}
