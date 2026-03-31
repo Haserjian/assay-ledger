@@ -98,7 +98,12 @@ jobs:
       - name: Open publication PR
         if: steps.write-key.outputs.skip == 'false'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # CHECKPOINT_PR_TOKEN must be a PAT with repo+workflow scopes (or a
+          # fine-grained token with pull-requests:write + workflows:read).
+          # PRs opened with a PAT trigger pull_request workflows normally.
+          # PRs opened with GITHUB_TOKEN do NOT — a manual synchronize push
+          # is required. See docs/ratification.md for the fallback procedure.
+          GH_TOKEN: ${{ secrets.CHECKPOINT_PR_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           NAME="${{ steps.emit.outputs.checkpoint_name }}"
           BRANCH="${{ steps.push-branch.outputs.branch }}"

@@ -1,0 +1,51 @@
+{
+  "_comment": "Machine-readable trust enforcement state. Updated when the ratchet advances. Do not edit manually.",
+  "schema_version": "1",
+  "as_of_commit": "e93ec58",
+  "as_of_date": "2026-03-31",
+  "trust_stage": 2,
+  "trust_stage_label": "T1 enforced",
+  "minimum_trust_tier": "T1",
+  "require_t1": true,
+  "active_signer": {
+    "signer_id": "assay-ci",
+    "trust_tier": "T1",
+    "workflow": "checkpoint-sign.yml"
+  },
+  "latest_checkpoint": {
+    "file": "checkpoints/checkpoint_0002.json",
+    "sequence_number": 2,
+    "signer_id": "assay-ci",
+    "trust_tier": "T1",
+    "merged_pr": 16
+  },
+  "ratchet_history": [
+    {
+      "stage": 1,
+      "label": "T0 accepted",
+      "require_t1": false,
+      "activated_commit": "4761bcc",
+      "activated_date": "2026-03-31",
+      "note": "Registry validation active; T0 accepted during bootstrap"
+    },
+    {
+      "stage": 2,
+      "label": "T1 enforced",
+      "require_t1": true,
+      "activated_commit": "e93ec58",
+      "activated_date": "2026-03-31",
+      "note": "Activated after checkpoint_0002 (T1, assay-ci) merged to main via PR #16"
+    }
+  ],
+  "ci_lanes": {
+    "ledger_prs": {
+      "required_check": "validate",
+      "workflow": "validate.yml"
+    },
+    "checkpoint_prs": {
+      "required_checks": ["checkpoint-validate", "checkpoint-trust", "validate"],
+      "note": "validate runs but skips ledger invariants on checkpoint-only PRs"
+    }
+  },
+  "known_operational_gap": "CHECKPOINT_PR_TOKEN not yet configured — checkpoint PRs require a manual synchronize push to fire pull_request workflow triggers. See docs/ratification.md."
+}
