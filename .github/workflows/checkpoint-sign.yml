@@ -1,17 +1,15 @@
 name: Sign Checkpoint (T1)
 
-# Runs on every push to main. Creates a signed checkpoint using the CI-bound
-# T1 key stored in LEDGER_SIGNING_KEY (GitHub Actions Secret).
+# Three-phase pipeline:
+#   Phase 1 — Emit:    create a signed checkpoint from the current ledger tip
+#   Phase 2 — Verify:  validate signature, registry membership, trust tier
+#   Phase 3 — Publish: open a PR; merge is the governance ratification gate
 #
-# Produces: checkpoints/checkpoint_NNNN.json signed by signer_id=assay-ci
-# Commits the checkpoint back to main automatically.
+# Failures in Phase 3 (publication) do not invalidate Phases 1–2 (artifact + proof).
+# Branch protection is intentional — checkpoint publication requires a governed merge.
 #
-# Prerequisites:
-#   - LEDGER_SIGNING_KEY secret must be set (base64-encoded Ed25519 seed, 32 bytes)
-#   - assay-ci entry must exist in signers.json with matching pubkey_sha256
-#
-# After the first checkpoint produced by this workflow, uncomment --require-t1
-# in checkpoint-trust.yml to complete T1 enforcement.
+# After the first T1 checkpoint is merged, uncomment --require-t1 in
+# checkpoint-trust.yml to complete enforcement.
 
 on:
   push:
@@ -21,7 +19,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # needed to commit the checkpoint back
+  contents: write       # push checkpoint branch
+  pull-requests: write  # open publication PR
 
 jobs:
   sign-checkpoint:
@@ -39,6 +38,7 @@ jobs:
       - name: Install deps
         run: pip install pynacl --quiet
 
+      # ── Phase 1: Emit ─────────────────────────────────────────────────────────
       - name: Check secret and write signing key
         id: write-key
         env:
@@ -54,28 +54,55 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create signed checkpoint
+      - name: Emit checkpoint
+        id: emit
         if: steps.write-key.outputs.skip == 'false'
         run: |
-          python create_checkpoint.py \
-            --signer-id assay-ci \
-            --ledger ledger.jsonl
-
-      - name: Verify the new checkpoint
-        if: steps.write-key.outputs.skip == 'false'
-        run: |
+          python create_checkpoint.py --signer-id assay-ci --ledger ledger.jsonl
           LATEST=$(ls checkpoints/checkpoint_*.json | sort | tail -1)
-          echo "Verifying: $LATEST"
-          python verify_checkpoint.py "$LATEST" --registry signers.json
-          echo "::notice title=T1 Checkpoint::Created and verified $LATEST (trust_tier=T1)"
+          echo "checkpoint_file=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "checkpoint_name=$(basename $LATEST .json)" >> "$GITHUB_OUTPUT"
+          echo "artifact_status=produced" >> "$GITHUB_OUTPUT"
 
-      - name: Commit checkpoint to main
+      # ── Phase 2: Verify ───────────────────────────────────────────────────────
+      - name: Verify checkpoint
+        id: verify
         if: steps.write-key.outputs.skip == 'false'
         run: |
+          LATEST="${{ steps.emit.outputs.checkpoint_file }}"
+          python verify_checkpoint.py "$LATEST" --registry signers.json
+          echo "verification_status=passed" >> "$GITHUB_OUTPUT"
+          echo "::notice title=T1 Checkpoint Verified::$LATEST verified at trust_tier=T1"
+
+      # ── Phase 3: Publish (via PR) ─────────────────────────────────────────────
+      - name: Push checkpoint branch
+        if: steps.write-key.outputs.skip == 'false'
+        run: |
+          NAME="${{ steps.emit.outputs.checkpoint_name }}"
+          BRANCH="checkpoint/${NAME}"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          LATEST=$(ls checkpoints/checkpoint_*.json | sort | tail -1)
-          git add "$LATEST"
-          git diff --cached --quiet && echo "No new checkpoint to commit" && exit 0
-          git commit -m "chore(checkpoint): T1 signed checkpoint $(basename $LATEST .json)"
-          git push
+          git checkout -b "$BRANCH"
+          git add "${{ steps.emit.outputs.checkpoint_file }}"
+          git commit -m "chore(checkpoint): T1 signed ${NAME}
+
+          artifact_status: produced
+          verification_status: ${{ steps.verify.outputs.verification_status }}
+          publication_status: pending_pr_merge
+          signer: assay-ci (T1)"
+          git push origin "$BRANCH"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+        id: push-branch
+
+      - name: Open publication PR
+        if: steps.write-key.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NAME="${{ steps.emit.outputs.checkpoint_name }}"
+          BRANCH="${{ steps.push-branch.outputs.branch }}"
+          gh pr create \
+            --title "chore(checkpoint): publish T1 signed ${NAME}" \
+            --body "$(printf '## Checkpoint publication\n\nThis PR ratifies a T1 signed checkpoint into the protected ledger history.\n\n| Field | Value |\n|-------|-------|\n| Checkpoint | `%s` |\n| Signer | `assay-ci` (T1) |\n| artifact_status | produced |\n| verification_status | passed |\n| publication_status | pending_pr_merge |\n\nMerging this PR constitutes governance ratification of the checkpoint.\n\nVerify locally:\n```\npython verify_checkpoint.py %s --registry signers.json\n```' "$NAME" "${{ steps.emit.outputs.checkpoint_file }}")" \
+            --base main \
+            --head "$BRANCH"
