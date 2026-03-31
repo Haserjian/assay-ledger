@@ -114,3 +114,47 @@ To revoke a signing key:
 4. Generate a new key and add a new entry before the next checkpoint.
 
 CI will reject any checkpoint signed by a revoked key.
+
+---
+
+## CI topology: two-lane model
+
+Checkpoint publication PRs and code/ledger PRs are different surfaces. They must not share required CI checks.
+
+### Lane 1 — Code and ledger PRs
+
+Required check: **`validate`**
+
+Triggers on: any PR targeting `main` (all branches)
+
+Tests: adversarial regression suite, `ledger.jsonl` validation, append invariant, checkpoint spot-check.
+
+**Do not require `validate` on checkpoint-only PRs.** The `validate` workflow tests ledger mutations — it has no meaningful work to do on a PR that only adds a `checkpoints/*.json` file, and the trigger path may not fire at all.
+
+### Lane 2 — Checkpoint publication PRs
+
+Required check: **`checkpoint-validate`**
+
+Triggers on: PRs targeting `main` with changes to `checkpoints/**`
+
+Tests: Ed25519 signature, registry membership, trust tier (T1 required), filename/sequence monotonicity.
+
+Branch pattern: `checkpoint/**` (auto-opened by `checkpoint-sign.yml`)
+
+### Invariants
+
+1. A checkpoint PR must pass `checkpoint-validate` before merge. This is the cryptographic ratification gate.
+2. `bypass_required_checks` is never the routine path for checkpoint publication. Bypasses must be documented with a governance exception receipt in `~/.claude/state/receipts/`.
+3. Branch protection must be configured separately for each lane. Do not add `validate` as a required check for checkpoint PRs.
+
+---
+
+## Force-push invariant
+
+Force-pushing to `main` is never permitted, regardless of context.
+
+The ledger is append-only. Force-pushing `main` can silently rewrite or erase ledger entries, breaking the hash chain and making all existing checkpoints unverifiable. There is no recovery path that does not involve disclosure.
+
+**If you think force-pushing `main` is the right fix:** it is not. Investigate the actual problem (topology mismatch, wrong base branch, stale branch protection config) and address it directly.
+
+Exception: force-pushing a checkpoint publication branch (`checkpoint/**`) before a PR is opened is survivable — no governance gate has been triggered yet. But this is still unusual and should be noted.

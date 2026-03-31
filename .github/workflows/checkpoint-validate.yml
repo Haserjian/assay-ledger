@@ -1,0 +1,111 @@
+name: Checkpoint Validate
+
+# Ratification lane for checkpoint publication PRs.
+#
+# This is the required check for checkpoint/** branches targeting main.
+# It verifies the structural and cryptographic integrity of a checkpoint
+# before governance ratification (merge).
+#
+# Two-lane topology:
+#   validate        — required for code/ledger PRs (main branch protection)
+#   checkpoint-validate — required for checkpoint/** PRs (this workflow)
+#
+# Do NOT require 'validate' on checkpoint-only PRs — it tests the wrong
+# surface (ledger.jsonl mutations) and will not trigger on checkpoint-only
+# branches. This is the dedicated lane for checkpoint ratification.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'checkpoints/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checkpoint-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install pynacl --quiet
+
+      - name: Identify checkpoint under review
+        id: identify
+        run: |
+          # Find all checkpoint files; the last one (lex/numeric order) is the new one.
+          FILES=$(ls checkpoints/checkpoint_*.json 2>/dev/null | sort)
+          if [ -z "$FILES" ]; then
+            echo "::error::No checkpoint files found in checkpoints/"
+            exit 1
+          fi
+          LATEST=$(echo "$FILES" | tail -1)
+          echo "checkpoint_file=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "Checkpoint under review: $LATEST"
+
+      - name: Verify signature and registry membership (T1 required)
+        run: |
+          python verify_checkpoint.py \
+            "${{ steps.identify.outputs.checkpoint_file }}" \
+            --registry signers.json \
+            --require-t1
+
+      - name: Check filename / sequence monotonicity
+        run: |
+          python3 - <<'PYEOF'
+          import json, re, sys
+          from pathlib import Path
+
+          files = sorted(Path("checkpoints").glob("checkpoint_*.json"))
+          if not files:
+              print("ERROR: no checkpoint files found")
+              sys.exit(1)
+
+          latest = files[-1]
+          data = json.loads(latest.read_text())
+
+          # Filename must match sequence_number field
+          m = re.match(r"checkpoint_(\d+)\.json", latest.name)
+          if not m:
+              print(f"ERROR: filename {latest.name!r} does not match checkpoint_XXXX.json pattern")
+              sys.exit(1)
+          filename_seq = int(m.group(1))
+          checkpoint_seq = data.get("sequence_number")
+          if checkpoint_seq != filename_seq:
+              print(f"ERROR: filename sequence {filename_seq} != checkpoint sequence_number {checkpoint_seq}")
+              sys.exit(1)
+
+          # Sequence must be monotonically increasing
+          if len(files) >= 2:
+              prev = files[-2]
+              prev_data = json.loads(prev.read_text())
+              expected = prev_data.get("sequence_number", 0) + 1
+              if checkpoint_seq != expected:
+                  print(f"ERROR: sequence_number {checkpoint_seq} is not contiguous "
+                        f"(previous={prev_data.get('sequence_number')}, expected next={expected})")
+                  sys.exit(1)
+
+          print(f"OK: {latest.name} — sequence_number={checkpoint_seq}, filename matches, monotonic")
+          PYEOF
+
+      - name: Report trust tier
+        run: |
+          python3 - "${{ steps.identify.outputs.checkpoint_file }}" <<'PYEOF'
+          import json, sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          data = json.loads(path.read_text())
+          signer = data.get("signer_id", "unknown")
+          seq = data.get("sequence_number")
+          ts = data.get("checkpoint_timestamp", "")
+          print(f"::notice title=Checkpoint Valid::sequence={seq} signer={signer} timestamp={ts}")
+          PYEOF
