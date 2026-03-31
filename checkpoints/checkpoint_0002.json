@@ -1,0 +1,11 @@
+{
+  "checkpoint_version": "1.0",
+  "sequence_number": 2,
+  "entry_count": 20,
+  "tip_hash": "76d26fefab935548e07c08f11d54656e7f2684c3747d22299fb291facba6b114",
+  "checkpoint_timestamp": "2026-03-31T10:22:22.890020+00:00",
+  "signer_id": "assay-ci",
+  "signer_pubkey": "cvYwMgLb3sd3O18KMjzoPtvRlpO/PgG1LaVDSZiFWCk=",
+  "signer_pubkey_sha256": "9320681bc09493580e845901c3599470caf98c4f2d34d45315a075451d37b48d",
+  "signature": "XdkGLb3xzWL9FNGzZ/aAAoyjgcjhab8pjws7W1ez36CDW4X0U0AB/f06UKBszEMLvbypk2+YlS+8h1YDjX3mAA=="
+}
