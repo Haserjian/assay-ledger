@@ -13,9 +13,11 @@ from copy import deepcopy
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from validate_ledger import validate_entry, validate_ledger
+from validate_ledger import GENESIS_HASH, validate_entry, validate_ledger
 
 # --- Fixtures ---
+
+GENESIS_PREV = GENESIS_HASH  # alias for readability in ledger-level tests
 
 VALID_ENTRY = {
     "schema_version": 1,
@@ -27,6 +29,7 @@ VALID_ENTRY = {
     "submitted_at": "2026-02-08T00:00:00+00:00",
     "source_repo": "Haserjian/ccio",
     "witness_status": "unwitnessed",
+    "prev_entry_hash": GENESIS_HASH,
 }
 
 
@@ -54,6 +57,11 @@ def must_pass(e, msg="expected validation to pass"):
 class TestRequiredFields:
     def test_valid_entry_passes(self):
         must_pass(VALID_ENTRY)
+
+    def test_missing_prev_entry_hash(self):
+        e = deepcopy(VALID_ENTRY)
+        del e["prev_entry_hash"]
+        must_fail(e, "missing required field 'prev_entry_hash'")
 
     def test_missing_pack_root_sha256(self):
         e = deepcopy(VALID_ENTRY)
@@ -275,6 +283,22 @@ class TestInjectionPayloads:
 
 # --- Ledger-level validation ---
 
+def _make_genesis_line(pack_sha: str = "a" * 64) -> str:
+    """Make a valid first entry anchored at GENESIS_HASH."""
+    e = deepcopy(VALID_ENTRY)
+    e["pack_root_sha256"] = pack_sha
+    e["prev_entry_hash"] = GENESIS_PREV
+    return json.dumps(e, separators=(",", ":"))
+
+
+def _chain_line(prev_line: str, pack_sha: str) -> str:
+    """Make a valid entry chained to prev_line."""
+    e = deepcopy(VALID_ENTRY)
+    e["pack_root_sha256"] = pack_sha
+    e["prev_entry_hash"] = hashlib.sha256(prev_line.encode()).hexdigest()
+    return json.dumps(e, separators=(",", ":"))
+
+
 class TestLedgerLevel:
     def test_empty_file_rejected(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
@@ -283,9 +307,9 @@ class TestLedgerLevel:
         assert any("empty" in e for e in errors)
 
     def test_duplicate_hash_rejected(self):
+        line1 = _make_genesis_line()
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
-            line = json.dumps(VALID_ENTRY, separators=(",", ":"))
-            f.write(line + "\n" + line + "\n")
+            f.write(line1 + "\n" + line1 + "\n")
         errors = validate_ledger(Path(f.name))
         assert any("duplicate" in e for e in errors)
 
@@ -296,25 +320,23 @@ class TestLedgerLevel:
         assert any("invalid JSON" in e for e in errors)
 
     def test_valid_single_entry(self):
+        """First entry must be anchored at GENESIS_HASH."""
+        line1 = _make_genesis_line()
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
-            f.write(json.dumps(VALID_ENTRY, separators=(",", ":")) + "\n")
+            f.write(line1 + "\n")
         errors = validate_ledger(Path(f.name))
         assert not errors, f"unexpected errors: {errors}"
 
     def test_hash_chain_valid(self):
-        line1 = json.dumps(VALID_ENTRY, separators=(",", ":"))
-        line1_hash = hashlib.sha256(line1.encode()).hexdigest()
-        entry2 = deepcopy(VALID_ENTRY)
-        entry2["pack_root_sha256"] = "b" * 64
-        entry2["prev_entry_hash"] = line1_hash
-        line2 = json.dumps(entry2, separators=(",", ":"))
+        line1 = _make_genesis_line()
+        line2 = _chain_line(line1, "b" * 64)
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             f.write(line1 + "\n" + line2 + "\n")
         errors = validate_ledger(Path(f.name))
         assert not errors, f"unexpected errors: {errors}"
 
     def test_hash_chain_broken(self):
-        line1 = json.dumps(VALID_ENTRY, separators=(",", ":"))
+        line1 = _make_genesis_line()
         entry2 = deepcopy(VALID_ENTRY)
         entry2["pack_root_sha256"] = "b" * 64
         entry2["prev_entry_hash"] = "c" * 64  # wrong hash
@@ -324,35 +346,39 @@ class TestLedgerLevel:
         errors = validate_ledger(Path(f.name))
         assert any("prev_entry_hash mismatch" in e for e in errors)
 
+    def test_wrong_genesis_hash_rejected(self):
+        """First entry with wrong prev_entry_hash (not GENESIS_HASH) is rejected."""
+        entry1 = deepcopy(VALID_ENTRY)
+        entry1["prev_entry_hash"] = "d" * 64  # not the genesis hash
+        line1 = json.dumps(entry1, separators=(",", ":"))
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            f.write(line1 + "\n")
+        errors = validate_ledger(Path(f.name))
+        assert any("genesis" in e.lower() or "prev_entry_hash mismatch" in e for e in errors), \
+            f"expected genesis mismatch error, got: {errors}"
+
+    def test_entry_missing_prev_entry_hash_rejected(self):
+        """Any entry missing prev_entry_hash is rejected after genesis migration."""
+        entry1 = deepcopy(VALID_ENTRY)
+        del entry1["prev_entry_hash"]
+        line1 = json.dumps(entry1, separators=(",", ":"))
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            f.write(line1 + "\n")
+        errors = validate_ledger(Path(f.name))
+        assert errors, "expected validation to fail for missing prev_entry_hash"
+
     def test_chain_continuity_enforced(self):
-        """Once prev_entry_hash appears, all subsequent entries must have it."""
-        line1 = json.dumps(VALID_ENTRY, separators=(",", ":"))
-        line1_hash = hashlib.sha256(line1.encode()).hexdigest()
-        entry2 = deepcopy(VALID_ENTRY)
-        entry2["pack_root_sha256"] = "b" * 64
-        entry2["prev_entry_hash"] = line1_hash
-        line2 = json.dumps(entry2, separators=(",", ":"))
-        # entry3 drops prev_entry_hash after chain was started
+        """All entries must have prev_entry_hash; dropping it mid-chain fails."""
+        line1 = _make_genesis_line()
+        line2 = _chain_line(line1, "b" * 64)
         entry3 = deepcopy(VALID_ENTRY)
         entry3["pack_root_sha256"] = "c" * 64
+        del entry3["prev_entry_hash"]  # dropped
         line3 = json.dumps(entry3, separators=(",", ":"))
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             f.write(line1 + "\n" + line2 + "\n" + line3 + "\n")
         errors = validate_ledger(Path(f.name))
-        assert any("chain continuity required" in e for e in errors)
-
-    def test_unchained_entries_before_chain_starts_are_valid(self):
-        """Entries before the first prev_entry_hash are grandfathered."""
-        line1 = json.dumps(VALID_ENTRY, separators=(",", ":"))
-        entry2 = deepcopy(VALID_ENTRY)
-        entry2["pack_root_sha256"] = "b" * 64
-        line2 = json.dumps(entry2, separators=(",", ":"))
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
-            f.write(line1 + "\n" + line2 + "\n")
-        errors = validate_ledger(Path(f.name))
-        # Only expect duplicate error, not chain errors
-        chain_errors = [e for e in errors if "chain continuity" in e or "prev_entry_hash" in e]
-        assert not chain_errors, f"unexpected chain errors: {chain_errors}"
+        assert errors, "expected failure when prev_entry_hash is dropped mid-chain"
 
     def test_missing_file(self):
         errors = validate_ledger(Path("/nonexistent/path.jsonl"))

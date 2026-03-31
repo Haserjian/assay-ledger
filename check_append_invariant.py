@@ -23,6 +23,9 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from validate_ledger import GENESIS_HASH
+
 
 # ---------------------------------------------------------------------------
 # Result model
@@ -140,7 +143,7 @@ def check_append_invariant(
         result.fail("invalid_json", "Appended record is not a JSON object")
         return result
 
-    # --- 6. Chain freshness: prev_entry_hash matches base tip ---
+    # --- 6. Chain freshness: prev_entry_hash matches base tip or genesis ---
     prev_hash = entry.get("prev_entry_hash")
     if base_lines:
         expected_hash = hashlib.sha256(base_lines[-1].encode("utf-8")).hexdigest()
@@ -148,7 +151,7 @@ def check_append_invariant(
             result.fail(
                 "missing_prev_hash",
                 "Appended record is missing prev_entry_hash "
-                "(required because base ledger is non-empty)",
+                "(required: all entries participate in the hash chain)",
             )
         elif prev_hash != expected_hash:
             result.fail(
@@ -156,10 +159,19 @@ def check_append_invariant(
                 f"prev_entry_hash mismatch: entry has {prev_hash[:16]}..., "
                 f"base tip is {expected_hash[:16]}...",
             )
-    elif prev_hash is not None:
-        # First entry in ledger should not have prev_entry_hash
-        # (unless the base was already chained — but if base is empty, no prev)
-        pass  # Allow prev_entry_hash on first entry (no-op)
+    else:
+        # First-ever entry: must be anchored at GENESIS_HASH
+        if prev_hash is None:
+            result.fail(
+                "missing_prev_hash",
+                "First ledger entry must include prev_entry_hash = GENESIS_HASH",
+            )
+        elif prev_hash != GENESIS_HASH:
+            result.fail(
+                "wrong_genesis_hash",
+                f"First entry prev_entry_hash must equal GENESIS_HASH "
+                f"({GENESIS_HASH[:16]}...), got {prev_hash[:16]}...",
+            )
 
     # --- 7. Terminal newline convention ---
     if candidate_raw and not candidate_raw.endswith("\n"):

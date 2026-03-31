@@ -16,6 +16,10 @@ from pathlib import Path
 SCHEMA_PATH = Path(__file__).parent / "ledger.schema.json"
 LEDGER_PATH = Path(__file__).parent / "ledger.jsonl"
 
+# Fixed genesis constant — entry 1's prev_entry_hash must equal this value.
+# Derived from sha256("assay-ledger-genesis-v1"). Never changes.
+GENESIS_HASH = hashlib.sha256(b"assay-ledger-genesis-v1").hexdigest()
+
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 SOURCE_REPO_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
@@ -43,6 +47,7 @@ REQUIRED_FIELDS = {
     "submitted_at",
     "source_repo",
     "witness_status",
+    "prev_entry_hash",
 }
 
 OPTIONAL_FIELDS = {
@@ -53,7 +58,6 @@ OPTIONAL_FIELDS = {
     "source_workflow",
     "signer_pubkey_sha256",
     "verifier_version",
-    "prev_entry_hash",
 }
 
 ALL_FIELDS = REQUIRED_FIELDS | OPTIONAL_FIELDS
@@ -148,8 +152,7 @@ def validate_ledger(path: Path) -> list[str]:
 
     errors: list[str] = []
     seen_roots: dict[str, int] = {}
-    prev_line_hash: str | None = None
-    chain_started = False  # True once any entry has prev_entry_hash
+    prev_line_hash: str | None = None  # None = before first entry
 
     with open(path) as f:
         for line_num, raw_line in enumerate(f, 1):
@@ -166,22 +169,17 @@ def validate_ledger(path: Path) -> list[str]:
 
             errors.extend(validate_entry(entry, line_num))
 
-            # Hash chain verification
+            # Hash chain verification — every entry participates from genesis
             chain_hash = entry.get("prev_entry_hash")
             if chain_hash is not None:
-                chain_started = True
-                if prev_line_hash is not None and chain_hash != prev_line_hash:
+                expected = GENESIS_HASH if prev_line_hash is None else prev_line_hash
+                if chain_hash != expected:
                     errors.append(
                         f"line {line_num}: prev_entry_hash mismatch: "
-                        f"expected {prev_line_hash[:16]}..., "
+                        f"expected {expected[:16]}..., "
                         f"got {chain_hash[:16]}..."
                     )
-            elif chain_started:
-                # Once chaining starts, all subsequent entries must continue it
-                errors.append(
-                    f"line {line_num}: missing prev_entry_hash "
-                    f"(chain continuity required after first chained entry)"
-                )
+            # Missing prev_entry_hash is caught by validate_entry (required field)
 
             prev_line_hash = hashlib.sha256(line.encode()).hexdigest()
 

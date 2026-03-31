@@ -9,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from check_append_invariant import check_append_invariant
+from validate_ledger import GENESIS_HASH
 
 VALID_ENTRY = {
     "schema_version": 1,
@@ -20,6 +21,7 @@ VALID_ENTRY = {
     "submitted_at": "2026-03-17T00:00:00+00:00",
     "source_repo": "Haserjian/test",
     "witness_status": "unwitnessed",
+    "prev_entry_hash": GENESIS_HASH,
 }
 
 
@@ -168,6 +170,7 @@ class TestStalePrevHash:
 
         no_prev = deepcopy(VALID_ENTRY)
         no_prev["pack_root_sha256"] = "b" * 64
+        del no_prev["prev_entry_hash"]  # explicitly absent
         _write_ledger(candidate, [VALID_ENTRY, no_prev])
 
         result = check_append_invariant(base, candidate)
