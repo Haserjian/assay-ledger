@@ -1,0 +1,72 @@
+{
+  "_comment": "Fill one copy of this template per checkpoint ratification. Store completed receipts at docs/receipts/ratification-YYYY-MM-DD-checkpointNNNN.json. This template documents both the happy path and the degraded fallback path so each drill produces a standardized artifact, not terminal narration.",
+  "schema_version": "1",
+  "receipt_type": "checkpoint_ratification",
+
+  "checkpoint": {
+    "file": "checkpoints/checkpoint_XXXX.json",
+    "sequence_number": null,
+    "signer_id": null,
+    "trust_tier": null
+  },
+
+  "workflow_run": {
+    "workflow": "Sign Checkpoint (T1)",
+    "run_url": "https://github.com/Haserjian/assay-ledger/actions/runs/RUNID",
+    "run_id": null,
+    "triggered_by": "workflow_dispatch | push",
+    "actor": null
+  },
+
+  "publication_pr": {
+    "pr_url": "https://github.com/Haserjian/assay-ledger/pull/N",
+    "pr_number": null,
+    "pr_actor": null,
+    "pr_created_by_token": "CHECKPOINT_PR_TOKEN | GITHUB_TOKEN"
+  },
+
+  "token_path": {
+    "source": "CHECKPOINT_PR_TOKEN | GITHUB_TOKEN (fallback)",
+    "log_notice": null,
+    "comment": "Paste the ::notice:: or ::warning:: line from the 'Log PR token source' step"
+  },
+
+  "checks": {
+    "fired_automatically": null,
+    "synchronize_push_required": null,
+    "results": {
+      "checkpoint-validate": "passed | failed | did_not_fire",
+      "checkpoint-trust": "passed | failed | did_not_fire",
+      "validate": "passed | failed | skipped_checkpoint_only"
+    },
+    "actors_on_checks": null,
+    "comment": "List the check names and conclusions as shown on the PR page"
+  },
+
+  "merge": {
+    "merged_by": null,
+    "merge_commit": null,
+    "all_required_checks_green_before_merge": null
+  },
+
+  "ratification_path": "normal | manual_fallback",
+  "manual_steps_required": [],
+
+  "proof_claims": {
+    "checkpoint_cryptographic_integrity": "proven — Ed25519 signature verified by checkpoint-validate",
+    "checkpoint_ci_origin": "proven — T1 signer (assay-ci) requires LEDGER_SIGNING_KEY secret in Actions",
+    "pr_checks_fired_without_nudge": null,
+    "governance_gate_respected": null
+  },
+
+  "degraded_path_notes": {
+    "_comment": "Complete this section only when ratification_path=manual_fallback",
+    "reason": null,
+    "manual_steps_taken": [],
+    "proof_tier_impact": "Checkpoint trust is unaffected (T1 signature still valid). Procedural gap: ratification required a manual synchronize push. This is a ceremony gap, not a cryptographic downgrade.",
+    "gap_id": "CHECKPOINT_PR_TOKEN_MISSING"
+  },
+
+  "date": "YYYY-MM-DD",
+  "receipted_by": null
+}
