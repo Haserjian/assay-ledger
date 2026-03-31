@@ -76,10 +76,12 @@ jobs:
 
       # ── Phase 3: Publish (via PR) ─────────────────────────────────────────────
       - name: Push checkpoint branch
+        id: push-branch
         if: steps.write-key.outputs.skip == 'false'
         run: |
           NAME="${{ steps.emit.outputs.checkpoint_name }}"
-          BRANCH="checkpoint/${NAME}"
+          # Include run ID to avoid branch collision on retries
+          BRANCH="checkpoint/${NAME}-run${{ github.run_id }}"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
@@ -92,7 +94,6 @@ jobs:
           signer: assay-ci (T1)"
           git push origin "$BRANCH"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-        id: push-branch
 
       - name: Open publication PR
         if: steps.write-key.outputs.skip == 'false'
