@@ -186,3 +186,104 @@ class TestTrustState:
         state = _trust_state()
         cp_file = ROOT / state["latest_checkpoint"]["file"]
         assert cp_file.exists(), f"Latest checkpoint file {cp_file} not found on disk"
+
+
+# ── trust_state.json cross-validation (drift detection) ──────────────────────
+
+class TestTrustStateCrossValidation:
+    """Verify trust_state.json agrees with the authoritative sources it summarizes.
+
+    trust_state.json is a derived state artifact, not a constitutional source.
+    These tests catch drift between the summary and the real sources:
+    signers.json, checkpoint files, and the active workflow config.
+    """
+
+    def test_active_signer_exists_in_registry(self):
+        """trust_state.active_signer.signer_id must be in signers.json."""
+        state = _trust_state()
+        registry = json.loads((ROOT / "signers.json").read_text())
+        signer_ids = {s["signer_id"] for s in registry["signers"]}
+        claimed_id = state["active_signer"]["signer_id"]
+        assert claimed_id in signer_ids, (
+            f"trust_state.json claims active signer {claimed_id!r} "
+            f"but signers.json has: {signer_ids}"
+        )
+
+    def test_active_signer_tier_matches_registry(self):
+        """trust_state.active_signer.trust_tier must match signers.json."""
+        state = _trust_state()
+        registry = json.loads((ROOT / "signers.json").read_text())
+        signers = {s["signer_id"]: s for s in registry["signers"]}
+        claimed_id = state["active_signer"]["signer_id"]
+        claimed_tier = state["active_signer"]["trust_tier"]
+        registry_tier = signers[claimed_id]["trust_tier"]
+        assert claimed_tier == registry_tier, (
+            f"trust_state.json says tier={claimed_tier!r} for {claimed_id!r}, "
+            f"but signers.json says {registry_tier!r}"
+        )
+
+    def test_active_signer_is_active_in_registry(self):
+        """trust_state.active_signer must have status=active in signers.json."""
+        state = _trust_state()
+        registry = json.loads((ROOT / "signers.json").read_text())
+        signers = {s["signer_id"]: s for s in registry["signers"]}
+        claimed_id = state["active_signer"]["signer_id"]
+        status = signers[claimed_id]["status"]
+        assert status == "active", (
+            f"trust_state.json names {claimed_id!r} as active signer, "
+            f"but signers.json has status={status!r}"
+        )
+
+    def test_latest_checkpoint_signer_matches_file(self):
+        """trust_state.latest_checkpoint.signer_id must match the checkpoint file."""
+        state = _trust_state()
+        cp_file = ROOT / state["latest_checkpoint"]["file"]
+        cp_data = json.loads(cp_file.read_text())
+        claimed_signer = state["latest_checkpoint"]["signer_id"]
+        actual_signer = cp_data.get("signer_id")
+        assert claimed_signer == actual_signer, (
+            f"trust_state.json says checkpoint signer={claimed_signer!r}, "
+            f"but {cp_file.name} has signer_id={actual_signer!r}"
+        )
+
+    def test_latest_checkpoint_sequence_matches_file(self):
+        """trust_state.latest_checkpoint.sequence_number must match the checkpoint file."""
+        state = _trust_state()
+        cp_file = ROOT / state["latest_checkpoint"]["file"]
+        cp_data = json.loads(cp_file.read_text())
+        claimed_seq = state["latest_checkpoint"]["sequence_number"]
+        actual_seq = cp_data.get("sequence_number")
+        assert claimed_seq == actual_seq, (
+            f"trust_state.json claims sequence_number={claimed_seq}, "
+            f"but {cp_file.name} has sequence_number={actual_seq}"
+        )
+
+    def test_latest_checkpoint_is_actually_latest(self):
+        """trust_state.latest_checkpoint must be the highest sequence on disk."""
+        state = _trust_state()
+        all_checkpoints = sorted((ROOT / "checkpoints").glob("checkpoint_*.json"))
+        if not all_checkpoints:
+            return  # no checkpoints yet
+        latest_on_disk = json.loads(all_checkpoints[-1].read_text())
+        claimed_seq = state["latest_checkpoint"]["sequence_number"]
+        actual_latest_seq = latest_on_disk.get("sequence_number")
+        assert claimed_seq == actual_latest_seq, (
+            f"trust_state.json claims latest checkpoint is sequence {claimed_seq}, "
+            f"but the highest checkpoint on disk is sequence {actual_latest_seq}. "
+            "Update trust_state.json when a new checkpoint is merged."
+        )
+
+    def test_require_t1_matches_workflow(self):
+        """trust_state.require_t1 must agree with the active checkpoint-trust.yml config."""
+        state = _trust_state()
+        workflow = _read_workflow("checkpoint-trust.yml")
+        active_require_t1_lines = [
+            line for line in workflow.splitlines()
+            if "--require-t1" in line and not line.strip().startswith("#")
+        ]
+        workflow_enforces_t1 = bool(active_require_t1_lines)
+        assert state["require_t1"] == workflow_enforces_t1, (
+            f"trust_state.json says require_t1={state['require_t1']}, "
+            f"but checkpoint-trust.yml {'has' if workflow_enforces_t1 else 'does not have'} "
+            "an active --require-t1 flag. Keep these in sync when advancing the ratchet."
+        )

@@ -95,14 +95,26 @@ jobs:
           git push origin "$BRANCH"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
+      - name: Log PR token source
+        if: steps.write-key.outputs.skip == 'false'
+        run: |
+          # GitHub Actions || returns the right side when the left is empty/null.
+          # An unset secret evaluates to '' (falsy), so this expression is valid.
+          # This step makes the active token source observable in the run log.
+          if [ -n "${{ secrets.CHECKPOINT_PR_TOKEN }}" ]; then
+            echo "::notice::PR token source: CHECKPOINT_PR_TOKEN (PAT) — pull_request workflows will trigger normally"
+          else
+            echo "::warning::PR token source: GITHUB_TOKEN (fallback) — pull_request workflows will NOT trigger automatically. A manual synchronize push is required. See docs/ratification.md."
+          fi
+
       - name: Open publication PR
         if: steps.write-key.outputs.skip == 'false'
         env:
-          # CHECKPOINT_PR_TOKEN must be a PAT with repo+workflow scopes (or a
-          # fine-grained token with pull-requests:write + workflows:read).
+          # CHECKPOINT_PR_TOKEN: PAT with repo+workflow scopes.
           # PRs opened with a PAT trigger pull_request workflows normally.
-          # PRs opened with GITHUB_TOKEN do NOT — a manual synchronize push
-          # is required. See docs/ratification.md for the fallback procedure.
+          # PRs opened with GITHUB_TOKEN do NOT — manual synchronize required.
+          # See docs/ratification.md. The || expression is valid: unset secrets
+          # return '' (falsy in Actions expressions), so the fallback fires correctly.
           GH_TOKEN: ${{ secrets.CHECKPOINT_PR_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           NAME="${{ steps.emit.outputs.checkpoint_name }}"
