@@ -47,5 +47,12 @@
       "note": "validate runs but skips ledger invariants on checkpoint-only PRs"
     }
   },
-  "known_operational_gap": "CHECKPOINT_PR_TOKEN not yet configured — checkpoint PRs require a manual synchronize push to fire pull_request workflow triggers. See docs/ratification.md."
+  "known_operational_gap": {
+    "id": "CHECKPOINT_PR_TOKEN_MISSING",
+    "description": "CHECKPOINT_PR_TOKEN PAT not set — PRs opened by GITHUB_TOKEN do not trigger pull_request workflows. Manual synchronize push required.",
+    "impact": "Each checkpoint PR needs one manual empty-commit push before required checks fire.",
+    "resolution": "Create PAT (repo + workflow scopes), store as CHECKPOINT_PR_TOKEN in GitHub Actions Secrets (Settings → Secrets and variables → Actions). No workflow changes needed.",
+    "fallback": "docs/ratification.md § Manual fallback",
+    "no_workflow_alternative": "pull_request required checks cannot be satisfied via workflow_run; PAT is the only path that preserves the governance gate and removes the manual step."
+  }
 }
