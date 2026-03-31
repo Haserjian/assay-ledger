@@ -258,8 +258,20 @@ class TestTrustStateCrossValidation:
             f"but {cp_file.name} has sequence_number={actual_seq}"
         )
 
+    def test_checkpoint_filenames_are_zero_padded(self):
+        """Checkpoint filenames must be zero-padded (checkpoint_XXXX.json).
+        The lexical-sort ordering that test_latest_checkpoint_is_actually_latest
+        depends on is only correct when filenames sort the same as sequence numbers."""
+        for cp_file in (ROOT / "checkpoints").glob("checkpoint_*.json"):
+            assert re.match(r"^checkpoint_\d{4}\.json$", cp_file.name), (
+                f"{cp_file.name} does not match checkpoint_XXXX.json (4-digit zero-padded). "
+                "All checkpoint filenames must be zero-padded to keep lexical and numeric "
+                "ordering consistent."
+            )
+
     def test_latest_checkpoint_is_actually_latest(self):
-        """trust_state.latest_checkpoint must be the highest sequence on disk."""
+        """trust_state.latest_checkpoint must be the highest sequence on disk.
+        Relies on zero-padded filenames (enforced by test_checkpoint_filenames_are_zero_padded)."""
         state = _trust_state()
         all_checkpoints = sorted((ROOT / "checkpoints").glob("checkpoint_*.json"))
         if not all_checkpoints:
