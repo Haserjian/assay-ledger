@@ -50,26 +50,3 @@ jobs:
             echo "No checkpoints present — skipping trust gate"
           fi
 
-      - name: Report trust tier
-        if: always()
-        run: |
-          if ls checkpoints/checkpoint_*.json 1>/dev/null 2>&1; then
-            LATEST=$(ls checkpoints/checkpoint_*.json | sort | tail -1)
-            python3 -c "
-import json, sys
-from pathlib import Path
-try:
-    cp = json.loads(Path('$LATEST').read_text())
-    reg = json.loads(Path('signers.json').read_text()) if Path('signers.json').exists() else {'signers': []}
-    signers = {s['signer_id']: s for s in reg.get('signers', [])}
-    entry = signers.get(cp.get('signer_id', ''), {})
-    tier = entry.get('trust_tier', 'unregistered')
-    seq = cp.get('sequence_number')
-    sid = cp.get('signer_id')
-    print(f'::notice title=Checkpoint Trust Tier::Checkpoint {seq} signed by {sid} at trust tier {tier}')
-    if tier == 'T0':
-        print('::warning title=T0 Checkpoint::This checkpoint is T0 (local key). Promote to T1 by provisioning LEDGER_SIGNING_KEY in GitHub Secrets.')
-except Exception as e:
-    print(f'::warning ::Could not report trust tier: {e}')
-"
-          fi
