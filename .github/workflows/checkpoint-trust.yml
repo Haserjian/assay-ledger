@@ -43,9 +43,9 @@ jobs:
           if ls checkpoints/checkpoint_*.json 1>/dev/null 2>&1; then
             LATEST=$(ls checkpoints/checkpoint_*.json | sort | tail -1)
             echo "Verifying checkpoint: $LATEST"
-            python verify_checkpoint.py "$LATEST" --registry signers.json
-            # Stage 2 (uncomment after T1 key provisioned):
-            # python verify_checkpoint.py "$LATEST" --registry signers.json --require-t1
+            # Stage 2: T1 enforcement active — assay-ci (T1) is in signers.json,
+            # checkpoint_0002 (T1) is on main. Sub-T1 signers are now rejected.
+            python verify_checkpoint.py "$LATEST" --registry signers.json --require-t1
           else
             echo "No checkpoints present — skipping trust gate"
           fi
