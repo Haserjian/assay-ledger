@@ -1,0 +1,64 @@
+{
+  "schema_version": "1",
+  "receipt_type": "merge_path_diagnosis",
+  "date": "2026-03-31",
+
+  "observed_error": {
+    "command": "gh pr merge 17 --repo Haserjian/assay-ledger --merge",
+    "error": "GraphQL: Resource not accessible by personal access token (mergePullRequest)",
+    "rest_fallback_test": "PUT /repos/Haserjian/assay-ledger/pulls/17/merge → HTTP 403"
+  },
+
+  "active_token": {
+    "type": "Fine-grained PAT",
+    "prefix": "github_pat_11BURSRAQ0...",
+    "env_var": "GITHUB_TOKEN",
+    "can_do": ["git push (HTTPS)", "gh API reads", "PR creation via CHECKPOINT_PR_TOKEN in workflows"],
+    "cannot_do": ["GraphQL mutations (merge, close PR)", "REST merge endpoint"]
+  },
+
+  "keyring_token": {
+    "type": "Classic OAuth token",
+    "prefix": "gho_...",
+    "scopes": ["gist", "read:org", "read:project", "repo", "user", "workflow"],
+    "status": "invalid — requires gh auth login to refresh",
+    "note": "repo scope would cover merge. This is the path to CLI merge if refreshed."
+  },
+
+  "root_cause": "Fine-grained PAT lacks 'Pull requests: write' permission. Merge (GraphQL or REST) requires that explicit permission. Classic token with 'repo' scope would work but is expired.",
+
+  "proof_level": "confirmed — two independent tests (GraphQL + REST) both return auth error on same token",
+
+  "governance_fork": {
+    "option_a": {
+      "label": "Intentional human ratification",
+      "design": "Merge stays browser-UI-only. Workflow proposes, checks attest, human approves. This is a legitimate constitutional choice — the final merge is the ratification act.",
+      "cost": "one browser click per checkpoint PR",
+      "benefit": "explicit human in the loop on the most consequential operation"
+    },
+    "option_b": {
+      "label": "Full automation",
+      "paths": [
+        {
+          "method": "Refresh keyring token via gh auth login",
+          "cost": "interactive browser login once — not possible in non-interactive shell",
+          "result": "gh pr merge would work immediately with existing repo scope"
+        },
+        {
+          "method": "Update fine-grained PAT to add Pull requests: write permission",
+          "cost": "Settings → Developer settings → PAT → edit → add permission",
+          "result": "current shell can merge without any further changes"
+        },
+        {
+          "method": "Add merge step to checkpoint-sign.yml using CHECKPOINT_PR_TOKEN",
+          "cost": "workflow change + CHECKPOINT_PR_TOKEN needs PR write scope confirmed",
+          "result": "fully automated, but removes human ratification gate"
+        }
+      ]
+    }
+  },
+
+  "current_state": "PR creation + check propagation: PROVEN automatic. Merge: requires one browser click. This is not regression — it is a deliberate governance choicepoint.",
+
+  "recommendation": "Keep merge human-gated (Option A) unless there is a specific operational reason to automate it. The organism now handles everything up to the merge gate automatically. The human click is the constitutional ratification act."
+}

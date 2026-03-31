@@ -1,7 +1,7 @@
 {
   "_comment": "Machine-readable trust enforcement state. Updated when the ratchet advances. Do not edit manually.",
   "schema_version": "1",
-  "as_of_commit": "e93ec58",
+  "as_of_commit": "0506427",
   "as_of_date": "2026-03-31",
   "trust_stage": 2,
   "trust_stage_label": "T1 enforced",
@@ -13,11 +13,11 @@
     "workflow": "checkpoint-sign.yml"
   },
   "latest_checkpoint": {
-    "file": "checkpoints/checkpoint_0002.json",
-    "sequence_number": 2,
+    "file": "checkpoints/checkpoint_0003.json",
+    "sequence_number": 3,
     "signer_id": "assay-ci",
     "trust_tier": "T1",
-    "merged_pr": 16
+    "merged_pr": 17
   },
   "ratchet_history": [
     {

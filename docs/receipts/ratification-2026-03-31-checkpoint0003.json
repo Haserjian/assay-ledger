@@ -1,0 +1,76 @@
+{
+  "schema_version": "1",
+  "receipt_type": "checkpoint_ratification",
+
+  "checkpoint": {
+    "file": "checkpoints/checkpoint_0003.json",
+    "sequence_number": 3,
+    "signer_id": "assay-ci",
+    "trust_tier": "T1"
+  },
+
+  "workflow_run": {
+    "workflow": "Sign Checkpoint (T1)",
+    "run_url": "https://github.com/Haserjian/assay-ledger/actions/runs/23813724067",
+    "run_id": 23813724067,
+    "triggered_by": "workflow_dispatch",
+    "actor": "Haserjian"
+  },
+
+  "publication_pr": {
+    "pr_url": "https://github.com/Haserjian/assay-ledger/pull/17",
+    "pr_number": 17,
+    "pr_actor": "Haserjian",
+    "pr_created_by_token": "CHECKPOINT_PR_TOKEN"
+  },
+
+  "token_path": {
+    "source": "CHECKPOINT_PR_TOKEN",
+    "log_notice": "##[notice]PR token source: CHECKPOINT_PR_TOKEN (PAT) — pull_request workflows will trigger normally",
+    "comment": "PAT is owned by Haserjian — GitHub treats PR as human-initiated, not bot-created. This is why pull_request events propagate and downstream workflows fire."
+  },
+
+  "checks": {
+    "fired_automatically": true,
+    "synchronize_push_required": false,
+    "results": {
+      "checkpoint-validate": "passed",
+      "checkpoint-trust": "passed",
+      "validate": "passed"
+    },
+    "check_run_ids": {
+      "checkpoint-trust": 23813733361,
+      "checkpoint-validate": 23813733362,
+      "validate": 23813733378
+    },
+    "time_from_pr_creation_to_checks_start_seconds": 3,
+    "actors_on_checks": "github-actions[bot] (workflow runs)",
+    "comment": "All three checks fired at 2026-03-31T18:41:47Z — 3 seconds after PR was created at 18:41:44Z. No manual synchronize push was required."
+  },
+
+  "merge": {
+    "merged_by": "Haserjian",
+    "merge_commit": "0506427",
+    "all_required_checks_green_before_merge": true
+  },
+
+  "ratification_path": "normal",
+  "manual_steps_required": [],
+
+  "proof_claims": {
+    "checkpoint_cryptographic_integrity": "proven — Ed25519 signature verified by checkpoint-validate",
+    "checkpoint_ci_origin": "proven — T1 signer (assay-ci) requires LEDGER_SIGNING_KEY secret in Actions",
+    "pr_checks_fired_without_nudge": "proven — all three checks fired 3 seconds after PR creation, no synchronize push",
+    "governance_gate_respected": "proven — mergeable_state=clean observed before merge, merge not bypassed"
+  },
+
+  "degraded_path_notes": {
+    "_comment": "Not applicable — normal path used."
+  },
+
+  "verdict": "PROVEN",
+  "verdict_evidence": "PAT path confirmed by ::notice:: in run log. PR actor is Haserjian (not github-actions[bot]). All three required checks (checkpoint-trust, checkpoint-validate, validate) fired automatically 3s after PR creation. No manual synchronize push performed. mergeable_state=clean confirmed before merge.",
+
+  "date": "2026-03-31",
+  "receipted_by": "Claude Sonnet 4.6"
+}
