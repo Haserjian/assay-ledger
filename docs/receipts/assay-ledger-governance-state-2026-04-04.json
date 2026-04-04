@@ -1,0 +1,48 @@
+{
+    "schema_version": "1",
+    "receipt_type": "governance_state_audit",
+    "date": "2026-04-04",
+    "repo": "Haserjian/assay-ledger",
+    "subject": "main branch protection posture and effective merge requirements",
+    "branch_protection_api_snapshot": {
+        "source": "gh api repos/Haserjian/assay-ledger/branches/main/protection",
+        "required_status_checks": [
+            "validate"
+        ],
+        "strict": true,
+        "pull_request_required": true,
+        "required_approving_review_count": 1,
+        "enforce_admins": true
+    },
+    "effective_branch_rules": {
+        "source": "gh api repos/Haserjian/assay-ledger/rules/branches/main",
+        "active_rules": [],
+        "interpretation": "No additional repository or organization rulesets were returned for main at audit time."
+    },
+    "historical_pre_hardening_snapshot": {
+        "required_approving_review_count": 0,
+        "enforce_admins": false,
+        "scope": "Earlier 2026-04-04 branch protection read before governance hardening and before PR #18 existed."
+    },
+    "push_path_observation": {
+        "commit": "0eba209",
+        "observation": "Direct push to main succeeded while GitHub reported bypassed rule violations for PR-only admission and the expected validate check.",
+        "interpretation": "This describes the pre-hardening direct-push path, not the current PR merge policy."
+    },
+    "pr_merge_path_observation": {
+        "pull_request": 18,
+        "review_decision": "REVIEW_REQUIRED",
+        "merge_state_status": "BLOCKED",
+        "status_checks_green": [
+            "validate",
+            "checkpoint-trust"
+        ],
+        "interpretation": "The current PR merge path requires an approving review even with green checks."
+    },
+    "disposition": "Receipt corrected to distinguish the current branch protection snapshot, effective branch rules, historical push-path evidence, and current PR merge requirements. No governance settings were changed in this PR update.",
+    "non_goals": [
+        "No branch protection settings are changed by this receipt update",
+        "No runtime or ledger mechanics are changed"
+    ],
+    "receipted_by": "GitHub Copilot (GPT-5.4)"
+}
