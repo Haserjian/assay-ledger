@@ -1,0 +1,30 @@
+{
+    "schema_version": "1",
+    "receipt_type": "governance_state_audit",
+    "date": "2026-04-04",
+    "repo": "Haserjian/assay-ledger",
+    "subject": "main branch protection posture",
+    "current_state": {
+        "required_status_checks": [
+            "validate"
+        ],
+        "strict": true,
+        "pull_request_required": true,
+        "required_approving_review_count": 0,
+        "enforce_admins": false
+    },
+    "observed_evidence": {
+        "branch_protection_source": "gh api repos/Haserjian/assay-ledger/branches/main/protection",
+        "push_observation": "Direct push of commit 0eba209 to main succeeded while GitHub reported bypassed rule violations for PR-only admission and the expected validate check."
+    },
+    "missing": [
+        "At least one required approving review on main",
+        "Admin enforcement on main"
+    ],
+    "disposition": "Policy decision pending. No governance tightening was applied in this slice.",
+    "non_goals": [
+        "No branch protection settings were changed",
+        "No governance tightening was mixed into commit 0eba209"
+    ],
+    "receipted_by": "GitHub Copilot (GPT-5.4)"
+}
