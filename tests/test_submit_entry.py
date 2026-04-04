@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+import submit_entry
 from submit_entry import extract_entry
+from validate_ledger import GENESIS_HASH
 
 
 def _write_manifest(pack_dir: Path, attestation: dict) -> None:
@@ -50,3 +52,13 @@ def test_extract_entry_accepts_pass_receipt_integrity(tmp_path: Path) -> None:
     assert entry["claim_check"] == "PASS"
     assert entry["n_receipts"] == 2
     assert entry["source_repo"] == "Haserjian/ccio"
+
+
+def test_next_prev_entry_hash_uses_genesis_for_empty_ledger(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ledger_path = tmp_path / "ledger.jsonl"
+
+    monkeypatch.setattr(submit_entry, "LEDGER_PATH", ledger_path)
+
+    assert submit_entry._next_prev_entry_hash() == GENESIS_HASH

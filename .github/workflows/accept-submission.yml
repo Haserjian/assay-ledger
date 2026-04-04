@@ -4,31 +4,31 @@ on:
   workflow_dispatch:
     inputs:
       pack_root_sha256:
-        description: 'SHA-256 attestation fingerprint'
+        description: "SHA-256 attestation fingerprint"
         required: true
       source_repo:
-        description: 'Source repo (owner/repo)'
+        description: "Source repo (owner/repo)"
         required: true
       pack_manifest_b64:
-        description: 'Base64-encoded pack_manifest.json (enables L2 witness verification)'
+        description: "Base64-encoded pack_manifest.json (enables manifest-level witness verification)"
         required: false
-        default: ''
+        default: ""
       pack_id:
-        description: 'Pack ID (ignored if manifest provided)'
+        description: "Pack ID (ignored if manifest provided)"
         required: false
-        default: ''
+        default: ""
       receipt_integrity:
-        description: 'PASS or FAIL (ignored if manifest provided)'
+        description: "PASS or FAIL (ignored if manifest provided)"
         required: false
-        default: ''
+        default: ""
       claim_check:
-        description: 'PASS, FAIL, or N/A (ignored if manifest provided)'
+        description: "PASS, FAIL, or N/A (ignored if manifest provided)"
         required: false
-        default: ''
+        default: ""
       n_receipts:
-        description: 'Number of receipts (ignored if manifest provided)'
+        description: "Number of receipts (ignored if manifest provided)"
         required: false
-        default: ''
+        default: ""
 
 permissions:
   contents: write
@@ -110,7 +110,7 @@ jobs:
           now = datetime.now(timezone.utc).isoformat()
 
           if manifest_b64:
-              # === WITNESSED PATH: build entry from witness-extracted fields ===
+              # === WITNESSED PATH: build entry from manifest-level witness-extracted fields ===
               from witness_verify import witness_verify
               result = witness_verify(manifest_b64, root)
 
@@ -141,7 +141,7 @@ jobs:
 
               print(f"Witness: {result.witness_status}")
           else:
-              # === UNWITNESSED PATH: accept self-reported fields ===
+              # === UNWITNESSED PATH: accept explicitly self-reported fields ===
               pack_id = os.environ.get("INPUT_PACK_ID", "").strip()
               integrity = os.environ.get("INPUT_RECEIPT_INTEGRITY", "").strip()
               claim = os.environ.get("INPUT_CLAIM_CHECK", "").strip()
@@ -176,8 +176,10 @@ jobs:
               }
               print("Warning: no manifest provided, entry is unwitnessed")
 
-          # Compute prev_entry_hash from the last line of the existing ledger
-          prev_hash = None
+            # Compute prev_entry_hash from the last line of the existing ledger,
+            # or anchor the first entry at the fixed genesis hash.
+            import hashlib
+            prev_hash = hashlib.sha256(b"assay-ledger-genesis-v1").hexdigest()
           try:
               with open("ledger.jsonl") as f:
                   last_line = ""
@@ -186,13 +188,11 @@ jobs:
                       if stripped:
                           last_line = stripped
               if last_line:
-                  import hashlib
                   prev_hash = hashlib.sha256(last_line.encode()).hexdigest()
           except FileNotFoundError:
               pass
 
-          if prev_hash:
-              entry["prev_entry_hash"] = prev_hash
+            entry["prev_entry_hash"] = prev_hash
 
           with open("ledger.jsonl", "a") as f:
               f.write(json.dumps(entry, separators=(",", ":")) + "\n")

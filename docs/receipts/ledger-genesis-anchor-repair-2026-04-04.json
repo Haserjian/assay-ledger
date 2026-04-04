@@ -1,0 +1,30 @@
+{
+  "schema_version": "1",
+  "receipt_type": "ledger_invariant_repair",
+  "date": "2026-04-04",
+  "summary": "Genesis submission paths now always emit prev_entry_hash anchored at GENESIS_HASH when the ledger is empty.",
+  "defect": {
+    "id": "ledger-genesis-prev-entry-hash-omission",
+    "invariant_violated": "Every ledger entry, including the first, must carry prev_entry_hash anchored at the fixed ledger genesis hash.",
+    "affected_paths": [
+      "submit_entry.py",
+      ".github/workflows/accept-submission.yml"
+    ],
+    "impact": "The first-entry append path could produce a schema-invalid or invariant-invalid ledger entry even though validate_ledger.py and the append invariant model already required genesis anchoring."
+  },
+  "fix": {
+    "manual_submit_path": "submit_entry.py now computes the next chain anchor as last-line hash or GENESIS_HASH.",
+    "workflow_submit_path": "accept-submission.yml now emits GENESIS_HASH when ledger.jsonl has no prior entries.",
+    "regression_test": "tests/test_submit_entry.py::test_next_prev_entry_hash_uses_genesis_for_empty_ledger"
+  },
+  "validation": {
+    "command": "/Users/timmybhaserjian/assay-ledger/.venv/bin/python -m pytest tests/test_submit_entry.py tests/test_validate_ledger.py -q",
+    "result": "passed",
+    "tests_passed": 68
+  },
+  "governance_still_open": [
+    "assay-ledger main still requires zero approving reviews",
+    "assay-ledger main still has enforce_admins disabled"
+  ],
+  "receipted_by": "GitHub Copilot (GPT-5.4)"
+}

@@ -20,6 +20,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from validate_ledger import GENESIS_HASH
+
 LEDGER_PATH = Path(__file__).parent / "ledger.jsonl"
 VALID_RECEIPT_INTEGRITY = {"PASS", "FAIL"}
 
@@ -95,6 +97,11 @@ def _last_line_hash() -> str | None:
     return hashlib.sha256(last_line.encode()).hexdigest()
 
 
+def _next_prev_entry_hash() -> str:
+    """Return the required chain anchor for the next appended entry."""
+    return _last_line_hash() or GENESIS_HASH
+
+
 def already_in_ledger(root_sha256: str) -> bool:
     """Check if this pack_root_sha256 is already in the ledger."""
     if not LEDGER_PATH.exists():
@@ -127,10 +134,8 @@ def main() -> int:
         print(f"Already in ledger: {entry['pack_root_sha256'][:16]}... ({entry['pack_id']})")
         return 0
 
-    # Compute prev_entry_hash from last line of ledger (hash chain)
-    prev_hash = _last_line_hash()
-    if prev_hash:
-        entry["prev_entry_hash"] = prev_hash
+    # Every ledger entry participates in the chain, including genesis.
+    entry["prev_entry_hash"] = _next_prev_entry_hash()
 
     with open(LEDGER_PATH, "a") as f:
         f.write(json.dumps(entry, separators=(",", ":")) + "\n")
