@@ -29,6 +29,13 @@
         "policy_change": "required_approving_review_count lowered from 1 to 0 while keeping strict required checks and admin enforcement"
     },
     "disposition": "Temporary solo-operation adjustment until a distinct human reviewer with write or admin access exists.",
+    "exit_criterion": {
+        "condition": "Re-raise required approving reviews from 0 to 1 when a second human with write or admin access is actively participating and can provide distinct PR review approvals.",
+        "target_state": {
+            "required_approving_review_count": 1,
+            "enforce_admins": true
+        }
+    },
     "non_goals": [
         "No required status checks were removed",
         "No admin bypass was reopened",
