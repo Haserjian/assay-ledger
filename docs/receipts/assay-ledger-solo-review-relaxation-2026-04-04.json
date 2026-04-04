@@ -1,0 +1,38 @@
+{
+    "schema_version": "1",
+    "receipt_type": "governance_policy_adjustment",
+    "date": "2026-04-04",
+    "repo": "Haserjian/assay-ledger",
+    "subject": "temporary solo-operation review relaxation on main",
+    "previous_state": {
+        "required_status_checks": [
+            "validate"
+        ],
+        "strict": true,
+        "pull_request_required": true,
+        "required_approving_review_count": 1,
+        "enforce_admins": true
+    },
+    "updated_state": {
+        "required_status_checks": [
+            "validate"
+        ],
+        "strict": true,
+        "pull_request_required": true,
+        "required_approving_review_count": 0,
+        "enforce_admins": true
+    },
+    "reason": "The repository is currently operating with a single human maintainer. Requiring one approving review created an impossible merge gate for self-authored PRs even when required checks were green.",
+    "evidence": {
+        "blocked_pr": 18,
+        "blocked_condition": "REVIEW_REQUIRED with successful validate and checkpoint-trust checks",
+        "policy_change": "required_approving_review_count lowered from 1 to 0 while keeping strict required checks and admin enforcement"
+    },
+    "disposition": "Temporary solo-operation adjustment until a distinct human reviewer with write or admin access exists.",
+    "non_goals": [
+        "No required status checks were removed",
+        "No admin bypass was reopened",
+        "No runtime or ledger mechanics were changed"
+    ],
+    "receipted_by": "GitHub Copilot (GPT-5.4)"
+}
