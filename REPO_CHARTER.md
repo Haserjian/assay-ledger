@@ -20,7 +20,8 @@ No secrets are stored in entries. The witness signing key is held by CI.
 - `validate` is a required, strict status check
 - Admin bypass is not part of the intended posture (`enforce_admins: true`)
 - `required_approving_review_count` is temporarily `0` under solo-operation
-  relaxation; the exit criterion for restoring `1` is recorded below
+  relaxation; the exit criterion for restoring `1` is recorded in the linked
+  solo-review relaxation receipt
 
 Audit trail:
 
