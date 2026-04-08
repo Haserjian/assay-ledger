@@ -12,6 +12,22 @@ anchoring (Trust Tier 2).
 Ed25519 signatures and attestation hash chains before accepting entries.
 No secrets are stored in entries. The witness signing key is held by CI.
 
+## Governance
+
+`main` is protected. Intended posture:
+
+- Changes land via pull request
+- `validate` is a required, strict status check
+- Admin bypass is not part of the intended posture (`enforce_admins: true`)
+- `required_approving_review_count` is temporarily `0` under solo-operation
+  relaxation; the exit criterion for restoring `1` is recorded below
+
+Audit trail:
+
+- [`docs/receipts/assay-ledger-governance-state-2026-04-04.json`](docs/receipts/assay-ledger-governance-state-2026-04-04.json)
+- [`docs/receipts/assay-ledger-solo-review-relaxation-2026-04-04.json`](docs/receipts/assay-ledger-solo-review-relaxation-2026-04-04.json)
+- [`docs/receipts/merge-path-diagnosis-2026-03-31.json`](docs/receipts/merge-path-diagnosis-2026-03-31.json)
+
 ## What Lives Here
 
 - `ledger.json` -- append-only record of witnessed attestations
