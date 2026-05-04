@@ -46,7 +46,7 @@ jobs:
 
       - name: Install test deps
         if: steps.scope.outputs.checkpoint_only != 'true'
-        run: pip install pytest pynacl --quiet
+        run: pip install pytest pynacl fastapi httpx --quiet
 
       - name: Run adversarial regression tests
         if: steps.scope.outputs.checkpoint_only != 'true'
