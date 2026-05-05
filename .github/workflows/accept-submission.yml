@@ -176,10 +176,10 @@ jobs:
               }
               print("Warning: no manifest provided, entry is unwitnessed")
 
-            # Compute prev_entry_hash from the last line of the existing ledger,
-            # or anchor the first entry at the fixed genesis hash.
-            import hashlib
-            prev_hash = hashlib.sha256(b"assay-ledger-genesis-v1").hexdigest()
+          # Compute prev_entry_hash from the last line of the existing ledger,
+          # or anchor the first entry at the fixed genesis hash.
+          import hashlib
+          prev_hash = hashlib.sha256(b"assay-ledger-genesis-v1").hexdigest()
           try:
               with open("ledger.jsonl") as f:
                   last_line = ""
@@ -192,7 +192,7 @@ jobs:
           except FileNotFoundError:
               pass
 
-            entry["prev_entry_hash"] = prev_hash
+          entry["prev_entry_hash"] = prev_hash
 
           with open("ledger.jsonl", "a") as f:
               f.write(json.dumps(entry, separators=(",", ":")) + "\n")

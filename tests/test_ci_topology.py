@@ -21,6 +21,60 @@ def _read_workflow(name: str) -> str:
     return (WORKFLOWS / name).read_text()
 
 
+def _literal_run_blocks(name: str) -> list[str]:
+    """Extract literal `run: |` blocks using their YAML block indentation."""
+    lines = _read_workflow(name).splitlines()
+    blocks: list[str] = []
+    index = 0
+    while index < len(lines):
+        match = re.match(r"^(?P<indent>\s*)run:\s*\|\s*$", lines[index])
+        if not match:
+            index += 1
+            continue
+
+        run_indent = len(match.group("indent"))
+        index += 1
+        raw_block: list[str] = []
+
+        while index < len(lines):
+            line = lines[index]
+            stripped = line.strip()
+            indent = len(line) - len(line.lstrip(" "))
+            if stripped and indent <= run_indent:
+                break
+            raw_block.append(line)
+            index += 1
+
+        content_indents = [
+            len(line) - len(line.lstrip(" "))
+            for line in raw_block
+            if line.strip()
+        ]
+        if not content_indents:
+            blocks.append("")
+            continue
+
+        content_indent = min(content_indents)
+        normalized: list[str] = []
+        for line in raw_block:
+            if line.strip():
+                normalized.append(line[content_indent:])
+            else:
+                normalized.append("")
+        blocks.append("\n".join(normalized))
+    return blocks
+
+
+def _python_heredocs(run_block: str) -> list[str]:
+    pattern = re.compile(
+        r"python3?\s+-\s+<<'(?P<tag>[A-Za-z0-9_]+)'\n"
+        r"(?P<body>.*?)"
+        r"(?:\n(?P=tag)(?:\n|$))",
+        re.DOTALL,
+    )
+    return [match.group("body") for match in pattern.finditer(run_block)]
+
+
 def _trust_state() -> dict:
     return json.loads((ROOT / "trust_state.json").read_text())
 
@@ -152,6 +206,26 @@ class TestCheckpointSignTopology:
         """Branch name must include run_id to prevent retry collisions."""
         content = _read_workflow("checkpoint-sign.yml")
         assert "github.run_id" in content
+
+
+# ── accept-submission.yml topology ───────────────────────────────────────────
+
+class TestAcceptSubmissionTopology:
+    def test_embedded_python_heredocs_compile(self):
+        """Workflow Python heredocs must compile after YAML run-block normalization."""
+        failures: list[str] = []
+        heredoc_count = 0
+        for block_index, run_block in enumerate(_literal_run_blocks("accept-submission.yml")):
+            for heredoc_index, body in enumerate(_python_heredocs(run_block)):
+                heredoc_count += 1
+                label = f"run block {block_index}, Python heredoc {heredoc_index}"
+                try:
+                    compile(body, f"accept-submission.yml:{label}", "exec")
+                except SyntaxError as exc:
+                    failures.append(f"{label}: {exc.__class__.__name__}: {exc}")
+
+        assert heredoc_count > 0, "expected accept-submission.yml to contain Python heredocs"
+        assert not failures, "\n".join(failures)
 
 
 # ── trust_state.json ──────────────────────────────────────────────────────────
