@@ -49,7 +49,8 @@
     },
     "assurance_level": {
       "type": "string",
-      "description": "Assurance level (L0, L1, etc.)"
+      "enum": ["L0", "L1", "L2", "L3"],
+      "description": "Assurance class recorded for the pack. Enum pinned 2026-06-15 to match the attestation contract (assay-toolkit src/assay/schemas/attestation.schema.json, assurance_level)."
     },
     "timestamp_start": {
       "type": "string",

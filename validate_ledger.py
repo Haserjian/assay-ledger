@@ -26,6 +26,8 @@ SOURCE_REPO_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
 VALID_INTEGRITY = {"PASS", "FAIL"}
 VALID_CLAIM = {"PASS", "FAIL", "N/A"}
 VALID_WITNESS = {"unwitnessed", "hash_verified", "signature_verified"}
+# assurance_level enum, sourced from assay-toolkit attestation.schema.json (2026-06-15)
+VALID_ASSURANCE = {"L0", "L1", "L2", "L3"}
 
 # Max lengths for string fields (bytes)
 MAX_LENGTHS = {
@@ -120,6 +122,11 @@ def validate_entry(entry: dict, line_num: int) -> list[str]:
     witness = entry.get("witness_status")
     if witness is not None and witness not in VALID_WITNESS:
         errors.append(f"line {line_num}: witness_status must be one of {VALID_WITNESS}, got '{witness}'")
+
+    # assurance_level enum (optional field; pinned to attestation contract)
+    assurance = entry.get("assurance_level")
+    if assurance is not None and assurance not in VALID_ASSURANCE:
+        errors.append(f"line {line_num}: assurance_level must be one of {VALID_ASSURANCE}, got '{assurance}'")
 
     # prev_entry_hash format (if present)
     prev_hash = entry.get("prev_entry_hash")
