@@ -145,6 +145,44 @@ class TestEnums:
     def test_schema_version_string(self):
         must_fail(entry(schema_version="1"), "schema_version must be 1")
 
+    def test_mode_valid_values(self):
+        must_pass(entry(mode="shadow"))
+        must_pass(entry(mode="enforced"))
+        must_pass(entry(mode="breakglass"))
+
+    def test_mode_optional(self):
+        must_pass(VALID_ENTRY)  # no mode present
+
+    def test_mode_active_rejected(self):
+        must_fail(entry(mode="active"), "mode must be one of")
+
+    def test_mode_empty_rejected(self):
+        must_fail(entry(mode=""), "mode must be one of")
+
+    def test_mode_lowercase_only_contract_rejected(self):
+        must_fail(entry(mode="Shadow"), "mode must be one of")
+
+    def test_assurance_level_valid_values(self):
+        must_pass(entry(assurance_level="L0"))
+        must_pass(entry(assurance_level="L1"))
+        must_pass(entry(assurance_level="L2"))
+        must_pass(entry(assurance_level="L3"))
+
+    def test_assurance_level_optional(self):
+        must_pass(VALID_ENTRY)  # no assurance_level present
+
+    def test_assurance_level_invalid_value(self):
+        must_fail(entry(assurance_level="L9"), "assurance_level must be one of")
+
+    def test_assurance_level_empty_rejected(self):
+        must_fail(entry(assurance_level=""), "assurance_level must be one of")
+
+    def test_assurance_level_lowercase_rejected(self):
+        must_fail(entry(assurance_level="l0"), "assurance_level must be one of")
+
+    def test_assurance_level_freeform_rejected(self):
+        must_fail(entry(assurance_level="high"), "assurance_level must be one of")
+
 
 # --- n_receipts ---
 
