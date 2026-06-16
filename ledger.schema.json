@@ -45,7 +45,8 @@
     },
     "mode": {
       "type": "string",
-      "description": "Pack mode (shadow, active, etc.)"
+      "enum": ["shadow", "enforced", "breakglass"],
+      "description": "Pack execution mode. Enum pinned 2026-06-15 to match the attestation contract (assay-toolkit src/assay/schemas/attestation.schema.json, mode)."
     },
     "assurance_level": {
       "type": "string",

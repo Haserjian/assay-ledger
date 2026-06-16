@@ -99,6 +99,8 @@ Required fields: `schema_version`, `pack_root_sha256`, `pack_id`, `receipt_integ
 
 Optional fields: `timestamp_start`, `timestamp_end`, `mode`, `assurance_level`, `source_workflow`, `signer_pubkey_sha256`, `verifier_version`, `witness_status`.
 
+`mode` is pinned to `shadow`, `enforced`, or `breakglass` to match the pack attestation contract. The ledger intentionally does not accept free-form lifecycle words such as `active` in this field.
+
 > **Shadow-mode entries:** Entries with `mode: shadow` and `assurance_level: L0` are calibration and test runs, not production evidence submissions. A `claim_check` of `FAIL` on these entries is expected and intentional — it confirms the honest-failure signal path is working correctly.
 
 ## Related Repos

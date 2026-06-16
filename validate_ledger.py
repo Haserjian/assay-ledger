@@ -26,6 +26,8 @@ SOURCE_REPO_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
 VALID_INTEGRITY = {"PASS", "FAIL"}
 VALID_CLAIM = {"PASS", "FAIL", "N/A"}
 VALID_WITNESS = {"unwitnessed", "hash_verified", "signature_verified"}
+# mode enum, sourced from assay-toolkit attestation.schema.json (2026-06-15)
+VALID_MODE = {"shadow", "enforced", "breakglass"}
 # assurance_level enum, sourced from assay-toolkit attestation.schema.json (2026-06-15)
 VALID_ASSURANCE = {"L0", "L1", "L2", "L3"}
 
@@ -100,6 +102,11 @@ def validate_entry(entry: dict, line_num: int) -> list[str]:
     claim = entry.get("claim_check")
     if claim is not None and claim not in VALID_CLAIM:
         errors.append(f"line {line_num}: claim_check must be PASS/FAIL/N/A, got '{claim}'")
+
+    # mode enum (optional field; pinned to attestation contract)
+    mode = entry.get("mode")
+    if mode is not None and mode not in VALID_MODE:
+        errors.append(f"line {line_num}: mode must be one of {VALID_MODE}, got '{mode}'")
 
     # n_receipts
     n = entry.get("n_receipts")
